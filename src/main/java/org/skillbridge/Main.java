@@ -1,8 +1,8 @@
-package org.example;
+package org.skillbridge;
 
-import org.example.database.DBConnection;
+import org.skillbridge.database.DBConnection;
 
-public class TestConnection {
+public class Main {
 
     public static void main(String[] args) {
 
