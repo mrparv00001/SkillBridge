@@ -13,7 +13,9 @@ public class DBConnection {
             "24cPrP7jfNiAnuf.root";
 
     private static final String PASSWORD =
-            "S1EnSarxsg8oMhzT";
+            "S1EnSarxsg8oMhzT";USE skillbridge;
+
+    DROP TABLE Users;
 
     public static Connection getConnection() {
 
