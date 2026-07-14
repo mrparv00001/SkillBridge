@@ -1,4 +1,4 @@
-package org.example.database;
+package org.skillbridge.database;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
