@@ -30,4 +30,24 @@ public class SkillDAO {
       }
       return skills;
   }
+
+    public boolean addSkill(Skill skill) {
+      String query = "INSERT INTO Skills (name, category, description) VALUES (?, ?, ?)";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, skill.getSkillName());
+            pstmt.setString(2, skill.getCategory());
+            pstmt.setString(3, skill.getDescription());
+
+            // Execute the update and check if any rows were affected
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 }
