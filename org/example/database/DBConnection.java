@@ -1,4 +1,4 @@
-package org.skillbridge.database;
+package org.example.database;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -13,9 +13,7 @@ public class DBConnection {
             "24cPrP7jfNiAnuf.root";
 
     private static final String PASSWORD =
-            "S1EnSarxsg8oMhzT";USE skillbridge;
-
-    DROP TABLE Users;
+            "S1EnSarxsg8oMhzT";
 
     public static Connection getConnection() {
 
