@@ -18,8 +18,8 @@ public class UserDAO {
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
         // Try-with-resources: This automatically closes the connection when done
-        try (Connection con = DBConnection.getConnection();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             // Fill in the '?' placeholders with actual user data
             stmt.setString(1, user.getFullName());

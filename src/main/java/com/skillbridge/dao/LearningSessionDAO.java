@@ -1,7 +1,7 @@
 package com.skillbridge.dao;
 
 import com.skillbridge.model.LearningSession;
-import com.skillbridge.util.DBConnection;
+import com.skillbridge.database.DBConnection;
 
 import java.sql.*;
 import java.util.ArrayList;
