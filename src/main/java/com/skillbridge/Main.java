@@ -1,6 +1,6 @@
-package org.skillbridge;
+package com.skillbridge;
 
-import org.skillbridge.database.DBConnection;
+import com.skillbridge.database.DBConnection;
 
 public class Main {
 
