@@ -1,4 +1,4 @@
-package org.skillbridge.model;
+package com.skillbridge.model;
 
 public class UserSkill
 {
