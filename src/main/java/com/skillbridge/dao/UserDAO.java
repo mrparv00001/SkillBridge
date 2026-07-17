@@ -1,7 +1,7 @@
 package com.skillbridge.dao;
 
 import com.skillbridge.model.User;
-import com.skillbridge.util.DBConnection; // We will use this to connect to the database
+import com.skillbridge.database.DBConnection; // We will use this to connect to the database
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -18,8 +18,8 @@ public class UserDAO {
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
         // Try-with-resources: This automatically closes the connection when done
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement stmt = con.prepareStatement(sql)) {
 
             // Fill in the '?' placeholders with actual user data
             stmt.setString(1, user.getFullName());

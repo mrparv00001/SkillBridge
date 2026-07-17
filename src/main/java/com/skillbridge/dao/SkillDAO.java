@@ -1,7 +1,7 @@
-package org.skillbridge.dao;
+package com.skillbridge.dao;
 
-import org.skillbridge.database.DBConnection;
-import org.skillbridge.model.Skill;
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.model.Skill;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
