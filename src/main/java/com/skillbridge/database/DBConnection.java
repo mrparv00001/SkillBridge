@@ -15,11 +15,21 @@ public class DBConnection {
     private static final String PASSWORD =
             "S1EnSarxsg8oMhzT";
 
-    // Notice I added 'throws SQLException' here
     public static Connection getConnection() throws SQLException {
-        Connection con = DriverManager.getConnection(URL, USER, PASSWORD);
-        // We only print this once to test. You can remove it later so it doesn't spam the console!
-        // System.out.println("✅ Connected Successfully!");
-        return con;
+        try {
+            // Attempt to connect to TiDB
+            Connection con = DriverManager.getConnection(URL, USER, PASSWORD);
+            System.out.println("✅ Connected Successfully!");
+            return con;
+
+        } catch (SQLException e) {
+            // Effective error logging: Tells you exactly what went wrong
+            System.err.println("❌ Database Connection Failed!");
+            System.err.println("Reason: " + e.getMessage());
+            System.err.println("State: " + e.getSQLState());
+
+            // Re-throw the error so your DAOs know the connection failed
+            throw e;
+        }
     }
 }
