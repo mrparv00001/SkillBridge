@@ -53,16 +53,16 @@ public class UserSkill
         this.userId = userId;
     }
 
-    public SkillType getSkillType() {
-        return skillType;
+    public String getSkillType() {
+        return skillType.name(); // Converts Enum to String
     }
 
     public void setSkillType(SkillType skillType) {
         this.skillType = skillType;
     }
 
-    public SkillLevel getSkillLevel() {
-        return skillLevel;
+    public String getSkillLevel() {
+        return skillLevel.name(); // Converts Enum to String
     }
 
     public void setSkillLevel(SkillLevel skillLevel) {
