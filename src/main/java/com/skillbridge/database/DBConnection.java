@@ -15,17 +15,11 @@ public class DBConnection {
     private static final String PASSWORD =
             "S1EnSarxsg8oMhzT";
 
-    public static Connection getConnection() {
-
-        try {
-            Connection con = DriverManager.getConnection(URL, USER, PASSWORD);
-            System.out.println("✅ Connected Successfully!");
-            return con;
-
-        } catch (SQLException e) {
-            System.out.println("❌ Connection Failed");
-            e.printStackTrace();
-            return null;
-        }
+    // Notice I added 'throws SQLException' here
+    public static Connection getConnection() throws SQLException {
+        Connection con = DriverManager.getConnection(URL, USER, PASSWORD);
+        // We only print this once to test. You can remove it later so it doesn't spam the console!
+        // System.out.println("✅ Connected Successfully!");
+        return con;
     }
 }
