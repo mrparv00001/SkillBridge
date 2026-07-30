@@ -67,7 +67,7 @@ public class FeedbackMenu {
         System.out.print("Enter your Comment: ");
         String comment = scanner.nextLine();
 
-        boolean success = feedbackService.submitFeedback(sessionId, currentUserId, reviewedId, rating, comment);
+        boolean success = feedbackService.leaveFeedback(sessionId, currentUserId, reviewedId, rating, comment);
         if (success) {
             System.out.println("Thank you! Feedback submitted successfully.");
         }
