@@ -9,7 +9,6 @@ public class SkillService {
 
     private final SkillDAO skillDAO;
 
-    // Constructor initializes the DAO
     public SkillService() {
         this.skillDAO = new SkillDAO();
     }
@@ -31,7 +30,7 @@ public class SkillService {
      * Adds a new skill to the platform after validating the input.
      */
     public boolean addNewSkill(Skill newSkill) {
-        // 1. Validate essential input fields
+        // 1. Validate essential input fields (Now includes Description)
         if (newSkill.getSkillName() == null || newSkill.getSkillName().trim().isEmpty()) {
             System.err.println("❌ Validation Error: Skill name cannot be empty.");
             return false;
@@ -39,6 +38,11 @@ public class SkillService {
 
         if (newSkill.getCategory() == null || newSkill.getCategory().trim().isEmpty()) {
             System.err.println("❌ Validation Error: Skill category cannot be empty.");
+            return false;
+        }
+
+        if (newSkill.getDescription() == null || newSkill.getDescription().trim().isEmpty()) {
+            System.err.println("❌ Validation Error: Skill description cannot be empty.");
             return false;
         }
 
