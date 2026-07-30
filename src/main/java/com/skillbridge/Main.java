@@ -1,16 +1,37 @@
 package com.skillbridge;
 
 import com.skillbridge.database.DBConnection;
+import com.skillbridge.menu.MainMenu;
+
+import java.sql.Connection;
 import java.sql.SQLException;
 
 public class Main {
-
     public static void main(String[] args) {
-        try {
-            DBConnection.getConnection();
-            System.out.println("Connection successful!");
+        System.out.println("==========================================");
+        System.out.println(" Welcome to SkillBridge Platform");
+        System.out.println(" Peer Learning & Skill Exchange System");
+        System.out.println("==========================================");
+
+        // Test database connection on startup
+        try (Connection conn = DBConnection.getConnection()) {
+            if (conn != null && !conn.isClosed()) {
+                System.out.println("✅ Database connection established successfully!");
+            } else {
+                System.err.println("❌ Failed to connect to the database.");
+                return;
+            }
         } catch (SQLException e) {
-            System.out.println("Connection failed!");
+            System.err.println("❌ Database connection error: " + e.getMessage());
+            return;
         }
+
+        // Launch the application Main Menu
+        MainMenu mainMenu = new MainMenu();
+        mainMenu.start();
+
+        System.out.println("==========================================");
+        System.out.println(" Thank you for using SkillBridge. Goodbye!");
+        System.out.println("==========================================");
     }
 }
