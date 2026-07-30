@@ -5,19 +5,15 @@ import com.skillbridge.model.User;
 
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
 public class RecommendationService {
 
     /**
-     * Recommends teachers for a given skill based on priority rules:
-     * 1. Skill-specific average rating
-     * 2. Number of reviews
-     * 3. Skill level (Advanced > Intermediate > Beginner)
-     * 4. Same department match
-     * 5. Same semester match
+     * Enhanced recommendation method that incorporates matching validation,
+     * self-match prevention, and priority sorting based on ratings, review counts,
+     * skill levels, and user demographics[cite: 1].
      */
     public List<User> getRecommendedTeachers(int learnerId, int desiredSkillId) {
         List<TeacherScore> scoredTeachers = new ArrayList<>();
@@ -25,25 +21,31 @@ public class RecommendationService {
 
         String sql = "SELECT u.*, us.skill_level FROM Users u " +
                 "JOIN UserSkills us ON u.user_id = us.user_id " +
-                "WHERE us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true AND u.user_id != ?";
+                "WHERE us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
 
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, desiredSkillId);
-            stmt.setInt(2, learnerId);
             ResultSet rs = stmt.executeQuery();
 
             while (rs.next()) {
+                int teacherId = rs.getInt("user_id");
+
+                // Feature from MatchmakingService: Prevent learners from matching with themselves
+                if (teacherId == learnerId) {
+                    continue;
+                }
+
                 User teacher = mapResultSetToUser(rs);
                 String skillLevel = rs.getString("skill_level");
 
-                double avgRating = getAverageRatingForTeacherSkill(teacher.getUserId(), desiredSkillId);
-                int reviewCount = getReviewCountForTeacherSkill(teacher.getUserId(), desiredSkillId);
+                double avgRating = getAverageRatingForTeacherSkill(teacherId, desiredSkillId);
+                int reviewCount = getReviewCountForTeacherSkill(teacherId, desiredSkillId);
 
                 int score = 0;
-                // Weighting criteria for sorting recommendations
-                score += (int) (avgRating * 100); // Higher rating gives major weight
-                score += (reviewCount * 10);     // More reviews boost score
+                // Priority scoring calculation
+                score += (int) (avgRating * 100);
+                score += (reviewCount * 10);
 
                 if ("Advanced".equalsIgnoreCase(skillLevel)) score += 50;
                 else if ("Intermediate".equalsIgnoreCase(skillLevel)) score += 30;
@@ -51,25 +53,31 @@ public class RecommendationService {
 
                 if (learner != null) {
                     if (learner.getDepartment() != null && learner.getDepartment().equalsIgnoreCase(teacher.getDepartment())) {
-                        score += 20; // Bonus for same department
+                        score += 20; // Same department bonus
                     }
                     if (learner.getSemester() == teacher.getSemester()) {
-                        score += 10; // Bonus for same semester
+                        score += 10; // Same semester bonus
                     }
                 }
 
                 scoredTeachers.add(new TeacherScore(teacher, score));
             }
         } catch (SQLException e) {
-            System.err.println("❌ Error fetching recommendations: " + e.getMessage());
+            System.err.println("❌ Error fetching recommendations and matches: " + e.getMessage());
         }
 
-        // Sort teachers descending by calculated priority score
+        // Sort descending by calculated priority score
         scoredTeachers.sort(Comparator.comparingInt(TeacherScore::getScore).reversed());
 
         List<User> sortedTeachers = new ArrayList<>();
         for (TeacherScore ts : scoredTeachers) {
             sortedTeachers.add(ts.getTeacher());
+        }
+
+        if (sortedTeachers.isEmpty()) {
+            System.out.println("ℹ️ No active teachers found for this skill match.");
+        } else {
+            System.out.println("✅ Found " + sortedTeachers.size() + " recommended teacher(s)!");
         }
 
         return sortedTeachers;
@@ -126,7 +134,6 @@ public class RecommendationService {
         return user;
     }
 
-    // Private helper class for sorting scores
     private static class TeacherScore {
         private final User teacher;
         private final int score;
