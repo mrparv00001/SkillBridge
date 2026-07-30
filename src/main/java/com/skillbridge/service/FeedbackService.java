@@ -14,20 +14,28 @@ public class FeedbackService {
     }
 
     /**
-     * Validates and submits a new piece of feedback for a completed session.
+     * Overloaded method to support direct parameters from FeedbackMenu.
      */
-    public boolean leaveFeedback(Feedback feedback) {
+    public boolean leaveFeedback(int sessionId, int reviewerId, int reviewedUserId, int rating, String comment) {
         // 1. Basic Validation
-        if (feedback.getSessionId() <= 0 || feedback.getReviewerId() <= 0 || feedback.getReviewedUserId() <= 0) {
+        if (sessionId <= 0 || reviewerId <= 0 || reviewedUserId <= 0) {
             System.err.println("❌ Validation Error: Missing critical IDs for feedback.");
             return false;
         }
 
         // Enforce a strict 1 to 5 rating scale
-        if (feedback.getRating() < 1 || feedback.getRating() > 5) {
+        if (rating < 1 || rating > 5) {
             System.err.println("❌ Validation Error: Rating must be between 1 and 5.");
             return false;
         }
+
+        // Create Feedback object to pass to DAO
+        Feedback feedback = new Feedback();
+        feedback.setSessionId(sessionId);
+        feedback.setReviewerId(reviewerId);
+        feedback.setReviewedUserId(reviewedUserId);
+        feedback.setRating(rating);
+        feedback.setComment(comment);
 
         // 2. Submit to the database via DAO
         boolean isSubmitted = feedbackDAO.submitFeedback(feedback);
@@ -42,9 +50,9 @@ public class FeedbackService {
     }
 
     /**
-     * Retrieves all general feedback left for a specific user.
+     * Retrieves all general feedback left for a specific user, matching FeedbackMenu call.
      */
-    public List<Feedback> getUserFeedback(int userId) {
+    public List<Feedback> getFeedbackForUser(int userId) {
         List<Feedback> feedbackList = feedbackDAO.getFeedbackByReviewedUser(userId);
 
         if (feedbackList.isEmpty()) {
@@ -57,19 +65,9 @@ public class FeedbackService {
     }
 
     /**
-     * Fetches and displays detailed skill-wise feedback for a user.
-     * This utilizes the SQL JOIN query from the DAO to print formatted strings.
+     * Fetches skill-wise feedback summary list, matching FeedbackMenu call.
      */
-    public void displaySkillWiseFeedback(int userId) {
-        List<String> skillFeedback = feedbackDAO.getSkillWiseFeedbackForUser(userId);
-
-        if (skillFeedback.isEmpty()) {
-            System.out.println("ℹ️ No skill-specific feedback available for this user.");
-        } else {
-            System.out.println("📊 Skill-Wise Feedback Breakdown:");
-            for (String record : skillFeedback) {
-                System.out.println("  - " + record);
-            }
-        }
+    public List<String> getSkillWiseFeedbackSummary(int userId) {
+        return feedbackDAO.getSkillWiseFeedbackForUser(userId);
     }
 }
