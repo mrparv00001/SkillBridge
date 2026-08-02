@@ -2,6 +2,7 @@ package com.skillbridge.util;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 
 public class Validator {
 
@@ -12,61 +13,67 @@ public class Validator {
     }
 
     public static boolean isValidEmail(String email) {
-        if (email == null || email.trim().isEmpty()) {
-            return false;
-        }
+        if (email == null || email.trim().isEmpty()) return false;
         return email.matches(EMAIL_PATTERN);
     }
 
     public static boolean isValidPassword(String password) {
-        if (password == null) {
-            return false;
-        }
-        if (password.length() < 6) {
-            return false;
-        }
-        return true;
+        if (password == null) return false;
+        return password.length() >= 6;
     }
 
     public static boolean isValidPhone(String phoneNumber) {
-        if (phoneNumber == null || phoneNumber.trim().isEmpty()) {
-            return false;
-        }
+        if (phoneNumber == null || phoneNumber.trim().isEmpty()) return false;
         return phoneNumber.matches(PHONE_PATTERN);
     }
 
     public static boolean isValidEnrollmentNo(String enrollmentNumber) {
-        if (enrollmentNumber == null || enrollmentNumber.trim().isEmpty()) {
-            return false;
-        }
-        if (enrollmentNumber.length() < 5) {
-            return false;
-        }
-        return true;
+        if (enrollmentNumber == null || enrollmentNumber.trim().isEmpty()) return false;
+        return enrollmentNumber.length() >= 5;
     }
 
-    // UPGRADED: Now allows scheduling sessions for TODAY
     public static boolean isFutureDate(LocalDate sessionDate) {
-        if (sessionDate == null) {
-            return false;
-        }
+        if (sessionDate == null) return false;
         return !sessionDate.isBefore(LocalDate.now());
     }
 
     public static boolean isValidTimeRange(LocalTime startTime, LocalTime endTime) {
-        if (startTime == null || endTime == null) {
-            return false;
-        }
+        if (startTime == null || endTime == null) return false;
         return startTime.isBefore(endTime);
     }
 
     public static boolean isEmptyText(String text) {
-        if (text == null) {
-            return true;
+        return text == null || text.trim().isEmpty();
+    }
+
+    public static int safeParseInt(String input) {
+        if (input == null || input.trim().isEmpty()) return -1;
+        try {
+            return Integer.parseInt(input.trim());
+        } catch (NumberFormatException e) {
+            return -1;
         }
-        if (text.trim().isEmpty()) {
-            return true;
+    }
+
+    public static LocalDate safeParseDate(String input) {
+        if (input == null || input.trim().isEmpty()) return null;
+        try {
+            return LocalDate.parse(input.trim());
+        } catch (DateTimeParseException e) {
+            return null;
         }
-        return false;
+    }
+
+    public static LocalTime safeParseTime(String input) {
+        if (input == null || input.trim().isEmpty()) return null;
+        try {
+            return LocalTime.parse(input.trim());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    public static boolean isValidRating(int rating) {
+        return rating >= 1 && rating <= 5;
     }
 }

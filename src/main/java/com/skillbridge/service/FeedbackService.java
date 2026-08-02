@@ -1,35 +1,62 @@
 package com.skillbridge.service;
 
 import com.skillbridge.dao.FeedbackDAO;
+import com.skillbridge.dao.LearningSessionDAO;
 import com.skillbridge.model.Feedback;
+import com.skillbridge.model.LearningSession;
 
 import java.util.List;
 
 public class FeedbackService {
 
     private final FeedbackDAO feedbackDAO;
+    private final LearningSessionDAO sessionDAO;
 
     public FeedbackService() {
         this.feedbackDAO = new FeedbackDAO();
+        this.sessionDAO = new LearningSessionDAO();
     }
 
-    /**
-     * Overloaded method to support direct parameters from FeedbackMenu.
-     */
     public boolean leaveFeedback(int sessionId, int reviewerId, int reviewedUserId, int rating, String comment) {
-        // 1. Basic Validation
         if (sessionId <= 0 || reviewerId <= 0 || reviewedUserId <= 0) {
-            System.err.println("❌ Validation Error: Missing critical IDs for feedback.");
+            System.err.println("❌ Validation Error: Invalid IDs provided.");
             return false;
         }
 
-        // Enforce a strict 1 to 5 rating scale
         if (rating < 1 || rating > 5) {
             System.err.println("❌ Validation Error: Rating must be between 1 and 5.");
             return false;
         }
 
-        // Create Feedback object to pass to DAO
+        if (reviewerId == reviewedUserId) {
+            System.err.println("❌ You cannot review yourself.");
+            return false;
+        }
+
+        // FIX: Check if session exists and is Completed
+        LearningSession session = sessionDAO.getSessionById(sessionId);
+        if (session == null) {
+            System.err.println("❌ Session not found.");
+            return false;
+        }
+
+        if (!"Completed".equalsIgnoreCase(session.getStatus())) {
+            System.err.println("❌ You can only submit feedback for Completed sessions.");
+            return false;
+        }
+
+        // FIX: Reviewer must be part of the session (teacher OR learner)
+        if (session.getTeacherId() != reviewerId && session.getLearnerId() != reviewerId) {
+            System.err.println("❌ Unauthorized: You were not part of this session.");
+            return false;
+        }
+
+        // FIX: Reviewed user must be the OTHER person in the session
+        if (session.getTeacherId() != reviewedUserId && session.getLearnerId() != reviewedUserId) {
+            System.err.println("❌ Invalid: Reviewed user is not part of this session.");
+            return false;
+        }
+
         Feedback feedback = new Feedback();
         feedback.setSessionId(sessionId);
         feedback.setReviewerId(reviewerId);
@@ -37,36 +64,25 @@ public class FeedbackService {
         feedback.setRating(rating);
         feedback.setComment(comment);
 
-        // 2. Submit to the database via DAO
         boolean isSubmitted = feedbackDAO.submitFeedback(feedback);
 
         if (isSubmitted) {
-            System.out.println("✅ Feedback successfully submitted. Thank you for your review!");
+            System.out.println("✅ Feedback successfully submitted. Thank you!");
         } else {
-            System.err.println("❌ Failed to submit feedback to the database.");
+            System.err.println("❌ Failed to submit feedback. You may have already reviewed this session.");
         }
 
         return isSubmitted;
     }
 
-    /**
-     * Retrieves all general feedback left for a specific user, matching FeedbackMenu call.
-     */
     public List<Feedback> getFeedbackForUser(int userId) {
         List<Feedback> feedbackList = feedbackDAO.getFeedbackByReviewedUser(userId);
-
-        if (feedbackList.isEmpty()) {
-            System.out.println("ℹ️ This user has not received any feedback yet.");
-        } else {
-            System.out.println("🌟 Found " + feedbackList.size() + " review(s) for this user.");
+        if (feedbackList == null || feedbackList.isEmpty()) {
+            System.out.println("ℹ️ No feedback found for this user yet.");
         }
-
         return feedbackList;
     }
 
-    /**
-     * Fetches skill-wise feedback summary list, matching FeedbackMenu call.
-     */
     public List<String> getSkillWiseFeedbackSummary(int userId) {
         return feedbackDAO.getSkillWiseFeedbackForUser(userId);
     }

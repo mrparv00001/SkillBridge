@@ -15,36 +15,44 @@ public class LearningSessionService {
     }
 
     public boolean scheduleSession(LearningSession session) {
-
         if (!Validator.isFutureDate(session.getSessionDate())) {
-            System.out.println("❌ Schedule failed: You can only schedule sessions for future dates.");
+            System.out.println("❌ Schedule failed: Date must be today or in the future.");
             return false;
         }
 
         if (!Validator.isValidTimeRange(session.getStartTime(), session.getEndTime())) {
-            System.out.println("❌ Schedule failed: The end time must be after the start time.");
+            System.out.println("❌ Schedule failed: End time must be after start time.");
             return false;
         }
 
         if (Validator.isEmptyText(session.getMode())) {
-            System.out.println("❌ Schedule failed: Please specify if it is Online or Offline.");
+            System.out.println("❌ Schedule failed: Please specify Online or Offline.");
             return false;
         }
 
-        // MILLIMETER UPGRADE: Prevent Double Booking (Time Clash Check)
-        List<LearningSession> teacherExistingSessions = sessionDAO.getSessionsByUser(session.getTeacherId());
-        for (LearningSession existing : teacherExistingSessions) {
-            // Check if it's on the same day and status is Scheduled
+        // Check teacher's time clash
+        List<LearningSession> teacherSessions = sessionDAO.getSessionsByUser(session.getTeacherId());
+        for (LearningSession existing : teacherSessions) {
             if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
                     existing.getSessionDate().equals(session.getSessionDate())) {
+                boolean overlap = session.getStartTime().isBefore(existing.getEndTime()) &&
+                        session.getEndTime().isAfter(existing.getStartTime());
+                if (overlap) {
+                    System.out.println("❌ Teacher is already booked during this time!");
+                    return false;
+                }
+            }
+        }
 
-                // Check if the new time overlaps with the existing time
-                boolean isOverlapping =
-                        (session.getStartTime().isBefore(existing.getEndTime()) &&
-                                session.getEndTime().isAfter(existing.getStartTime()));
-
-                if (isOverlapping) {
-                    System.out.println("❌ Schedule failed: The Teacher is already booked for a session during this time!");
+        // FIX: Check learner's time clash too
+        List<LearningSession> learnerSessions = sessionDAO.getSessionsByUser(session.getLearnerId());
+        for (LearningSession existing : learnerSessions) {
+            if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
+                    existing.getSessionDate().equals(session.getSessionDate())) {
+                boolean overlap = session.getStartTime().isBefore(existing.getEndTime()) &&
+                        session.getEndTime().isAfter(existing.getStartTime());
+                if (overlap) {
+                    System.out.println("❌ Learner is already booked during this time!");
                     return false;
                 }
             }
@@ -57,34 +65,51 @@ public class LearningSessionService {
         return sessionDAO.getSessionsByUser(userId);
     }
 
-    public boolean completeSession(int sessionId) {
+    // FIX: Added authorization check
+    public boolean completeSession(int sessionId, int currentUserId) {
         LearningSession session = sessionDAO.getSessionById(sessionId);
 
         if (session == null) {
-            System.out.println("Error: Session ID not found.");
+            System.out.println("❌ Session not found.");
             return false;
         }
+
+        // FIX: Only teacher or learner can complete
+        if (session.getTeacherId() != currentUserId && session.getLearnerId() != currentUserId) {
+            System.out.println("❌ Unauthorized: Only session participants can mark it complete.");
+            return false;
+        }
+
         if (session.getStatus().equalsIgnoreCase("Completed")) {
-            System.out.println("Error: This session is already completed!");
+            System.out.println("❌ Session is already completed!");
             return false;
         }
+
         if (session.getStatus().equalsIgnoreCase("Cancelled")) {
-            System.out.println("Error: Cannot complete a cancelled session.");
+            System.out.println("❌ Cannot complete a cancelled session.");
             return false;
         }
 
         return sessionDAO.markSessionCompleted(sessionId);
     }
 
-    public boolean cancelSession(int sessionId) {
+    // FIX: Added authorization check
+    public boolean cancelSession(int sessionId, int currentUserId) {
         LearningSession session = sessionDAO.getSessionById(sessionId);
 
         if (session == null) {
-            System.out.println("Error: Session ID not found.");
+            System.out.println("❌ Session not found.");
             return false;
         }
+
+        // FIX: Only teacher or learner can cancel
+        if (session.getTeacherId() != currentUserId && session.getLearnerId() != currentUserId) {
+            System.out.println("❌ Unauthorized: Only session participants can cancel it.");
+            return false;
+        }
+
         if (!session.getStatus().equalsIgnoreCase("Scheduled")) {
-            System.out.println("Error: You can only cancel sessions that are 'Scheduled'.");
+            System.out.println("❌ Only Scheduled sessions can be cancelled.");
             return false;
         }
 

@@ -7,11 +7,16 @@ import com.skillbridge.util.Validator;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class AuthenticationService {
 
     private UserService userService;
     private UserDAO userDAO;
+
+    private static final Map<String, Integer> loginAttempts = new HashMap<>();
+    private static final int MAX_ATTEMPTS = 5;
 
     public AuthenticationService() {
         this.userService = new UserService();
@@ -19,9 +24,12 @@ public class AuthenticationService {
     }
 
     public boolean register(User newUser) {
-        // MILLIMETER UPGRADE: Standardize email format (Lowercase & Trim)
         if (newUser.getEmail() != null) {
             newUser.setEmail(newUser.getEmail().toLowerCase().trim());
+        }
+
+        if (newUser.getEnrollmentNo() != null) {
+            newUser.setEnrollmentNo(newUser.getEnrollmentNo().toUpperCase().trim());
         }
 
         if (!Validator.isValidEmail(newUser.getEmail())) {
@@ -46,18 +54,26 @@ public class AuthenticationService {
             return false;
         }
 
-        // MILLIMETER UPGRADE: Standardize input email before querying database
         email = email.toLowerCase().trim();
+
+        int attempts = loginAttempts.getOrDefault(email, 0);
+        if (attempts >= MAX_ATTEMPTS) {
+            System.out.println("Login failed: Too many failed attempts. Please try again later.");
+            return false;
+        }
+
         User user = userDAO.getUserByEmail(email);
 
         if (user == null) {
+            loginAttempts.put(email, attempts + 1);
             System.out.println("Login failed: No account found with that email.");
             return false;
         }
 
         String encryptedInputPassword = hashPassword(password);
         if (!user.getPasswordHash().equals(encryptedInputPassword)) {
-            System.out.println("Login failed: Incorrect password.");
+            loginAttempts.put(email, attempts + 1);
+            System.out.println("Login failed: Incorrect password. Attempts remaining: " + (MAX_ATTEMPTS - attempts - 1));
             return false;
         }
 
@@ -66,6 +82,7 @@ public class AuthenticationService {
             return false;
         }
 
+        loginAttempts.remove(email);
         SessionManager.login(user);
         System.out.println("Login successful! Welcome, " + user.getFullName() + ".");
         return true;
@@ -83,9 +100,7 @@ public class AuthenticationService {
             StringBuilder hexString = new StringBuilder();
             for (byte b : encodedHash) {
                 String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
+                if (hex.length() == 1) hexString.append('0');
                 hexString.append(hex);
             }
             return hexString.toString();

@@ -3,6 +3,7 @@ package com.skillbridge.menu;
 import com.skillbridge.model.LearningSession;
 import com.skillbridge.service.LearningSessionService;
 import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -41,51 +42,52 @@ public class SessionMenu {
                 case "3": handleCompleteSession(); break;
                 case "4": handleCancelSession(); break;
                 case "5": running = false; break;
-                default: System.out.println("Invalid choice. Please try again.");
+                default: System.out.println("❌ Invalid choice.");
             }
         }
     }
 
     private void handleScheduleSession() {
         System.out.println("\n--- SCHEDULE SESSION ---");
-        try {
-            System.out.print("Enter Exchange Request ID: ");
-            int requestId = Integer.parseInt(scanner.nextLine());
 
-            System.out.print("Enter Partner's User ID: ");
-            int partnerId = Integer.parseInt(scanner.nextLine());
+        System.out.print("Enter Exchange Request ID: ");
+        int requestId = Validator.safeParseInt(scanner.nextLine());
+        if (requestId == -1) { System.out.println("❌ Invalid Request ID."); return; }
 
-            System.out.print("Enter Skill ID being taught/learned: ");
-            int skillId = Integer.parseInt(scanner.nextLine());
+        System.out.print("Enter Partner's User ID: ");
+        int partnerId = Validator.safeParseInt(scanner.nextLine());
+        if (partnerId == -1) { System.out.println("❌ Invalid Partner ID."); return; }
 
-            System.out.print("Enter Date (YYYY-MM-DD): ");
-            LocalDate date = LocalDate.parse(scanner.nextLine());
+        System.out.print("Enter Skill ID: ");
+        int skillId = Validator.safeParseInt(scanner.nextLine());
+        if (skillId == -1) { System.out.println("❌ Invalid Skill ID."); return; }
 
-            System.out.print("Enter Start Time (HH:MM) 24-hour format: ");
-            LocalTime startTime = LocalTime.parse(scanner.nextLine());
+        System.out.print("Enter Date (YYYY-MM-DD): ");
+        LocalDate date = Validator.safeParseDate(scanner.nextLine());
+        if (date == null) { System.out.println("❌ Invalid date. Use YYYY-MM-DD format."); return; }
 
-            System.out.print("Enter End Time (HH:MM) 24-hour format: ");
-            LocalTime endTime = LocalTime.parse(scanner.nextLine());
+        System.out.print("Enter Start Time (HH:MM): ");
+        LocalTime startTime = Validator.safeParseTime(scanner.nextLine());
+        if (startTime == null) { System.out.println("❌ Invalid time. Use HH:MM 24-hour format."); return; }
 
-            System.out.print("Mode (Online/Offline): ");
-            String mode = scanner.nextLine();
+        System.out.print("Enter End Time (HH:MM): ");
+        LocalTime endTime = Validator.safeParseTime(scanner.nextLine());
+        if (endTime == null) { System.out.println("❌ Invalid time. Use HH:MM 24-hour format."); return; }
 
-            // UPGRADED: Fixed the missing Meeting Link bug
-            System.out.print("Meeting Link (leave blank if Offline): ");
-            String link = scanner.nextLine();
+        System.out.print("Mode (Online/Offline): ");
+        String mode = scanner.nextLine();
 
-            System.out.print("Location (leave blank if Online): ");
-            String location = scanner.nextLine();
+        System.out.print("Meeting Link (blank if Offline): ");
+        String link = scanner.nextLine();
 
-            int myId = SessionManager.getCurrentUser().getUserId();
-            LearningSession session = new LearningSession(requestId, myId, partnerId, skillId, date, startTime, endTime, mode, link, location);
+        System.out.print("Location (blank if Online): ");
+        String location = scanner.nextLine();
 
-            if (sessionService.scheduleSession(session)) {
-                System.out.println("Session scheduled successfully!");
-            }
-        } catch (Exception e) {
-            // UPGRADED: Prevents the app from crashing if they type text instead of numbers
-            System.out.println("Invalid input format. Please check dates (YYYY-MM-DD) and IDs.");
+        int myId = SessionManager.getCurrentUser().getUserId();
+        LearningSession session = new LearningSession(requestId, myId, partnerId, skillId, date, startTime, endTime, mode, link, location);
+
+        if (sessionService.scheduleSession(session)) {
+            System.out.println("✅ Session scheduled successfully!");
         }
     }
 
@@ -94,8 +96,8 @@ public class SessionMenu {
         int myId = SessionManager.getCurrentUser().getUserId();
         List<LearningSession> sessions = sessionService.getUserSessionHistory(myId);
 
-        if (sessions.isEmpty()) {
-            System.out.println("You have no learning sessions yet.");
+        if (sessions == null || sessions.isEmpty()) {
+            System.out.println("ℹ️ No sessions yet.");
         } else {
             for (LearningSession session : sessions) {
                 System.out.println(session.toString());
@@ -105,27 +107,25 @@ public class SessionMenu {
 
     private void handleCompleteSession() {
         System.out.println("\n--- COMPLETE SESSION ---");
-        System.out.print("Enter Session ID to mark as completed: ");
-        try {
-            int sessionId = Integer.parseInt(scanner.nextLine());
-            if (sessionService.completeSession(sessionId)) {
-                System.out.println("Session successfully marked as completed!");
-            }
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid Session ID.");
+        System.out.print("Enter Session ID: ");
+        int sessionId = Validator.safeParseInt(scanner.nextLine());
+        if (sessionId == -1) { System.out.println("❌ Invalid Session ID."); return; }
+
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        if (sessionService.completeSession(sessionId, currentUserId)) {
+            System.out.println("✅ Session marked completed!");
         }
     }
 
     private void handleCancelSession() {
         System.out.println("\n--- CANCEL SESSION ---");
-        System.out.print("Enter Session ID to cancel: ");
-        try {
-            int sessionId = Integer.parseInt(scanner.nextLine());
-            if (sessionService.cancelSession(sessionId)) {
-                System.out.println("Session successfully cancelled.");
-            }
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid Session ID.");
+        System.out.print("Enter Session ID: ");
+        int sessionId = Validator.safeParseInt(scanner.nextLine());
+        if (sessionId == -1) { System.out.println("❌ Invalid Session ID."); return; }
+
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        if (sessionService.cancelSession(sessionId, currentUserId)) {
+            System.out.println("✅ Session cancelled!");
         }
     }
 }
