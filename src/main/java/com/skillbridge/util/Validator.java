@@ -18,43 +18,8 @@ public class Validator {
     }
 
     public static boolean isValidPassword(String password) {
-        if (password == null || password.length() < 6) {
-            System.out.println("❌ Password must be at least 6 characters long.");
-            return false;
-        }
-
-        boolean hasUpperCase = false;
-        boolean hasLowerCase = false;
-        boolean hasDigit = false;
-        boolean hasSpecialChar = false;
-
-        String specialChars = "!@#$%^&*()_+-=[]{}|;:,.<>?";
-
-        for (char ch : password.toCharArray()) {
-            if (Character.isUpperCase(ch)) hasUpperCase = true;
-            else if (Character.isLowerCase(ch)) hasLowerCase = true;
-            else if (Character.isDigit(ch)) hasDigit = true;
-            else if (specialChars.indexOf(ch) >= 0) hasSpecialChar = true;
-        }
-
-        if (!hasUpperCase) {
-            System.out.println("❌ Password must contain at least one UPPERCASE letter.");
-            return false;
-        }
-        if (!hasLowerCase) {
-            System.out.println("❌ Password must contain at least one lowercase letter.");
-            return false;
-        }
-        if (!hasDigit) {
-            System.out.println("❌ Password must contain at least one number.");
-            return false;
-        }
-        if (!hasSpecialChar) {
-            System.out.println("❌ Password must contain at least one special character (!@#$% etc).");
-            return false;
-        }
-
-        return true;
+        if (password == null) return false;
+        return password.length() >= 6;
     }
 
     public static boolean isValidPhone(String phoneNumber) {
