@@ -29,9 +29,5 @@ public class Main {
         // Launch the application Main Menu
         MainMenu mainMenu = new MainMenu();
         mainMenu.start();
-
-        System.out.println("==========================================");
-        System.out.println(" Thank you for using SkillBridge. Goodbye!");
-        System.out.println("==========================================");
     }
 }

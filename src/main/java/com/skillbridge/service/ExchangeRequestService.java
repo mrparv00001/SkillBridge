@@ -11,9 +11,22 @@ public class ExchangeRequestService {
 
     public boolean sendExchangeRequest(int senderId, int receiverId, int requestedSkillId, String exchangeType, String message) {
         if (senderId == receiverId) {
-            System.out.println("You cannot send an exchange request to yourself.");
+            System.out.println("❌ You cannot send a request to yourself.");
             return false;
         }
+
+        // FIX: Check for duplicate pending request
+        List<ExchangeRequest> existingRequests = exchangeRequestDAO.getRequestsByUserId(senderId);
+        for (ExchangeRequest req : existingRequests) {
+            if (req.getSenderId() == senderId &&
+                    req.getReceiverId() == receiverId &&
+                    req.getRequestedSkillId() == requestedSkillId &&
+                    "Pending".equalsIgnoreCase(req.getStatus())) {
+                System.out.println("❌ You already have a pending request for this skill with this user.");
+                return false;
+            }
+        }
+
         ExchangeRequest request = new ExchangeRequest();
         request.setSenderId(senderId);
         request.setReceiverId(receiverId);
@@ -26,15 +39,15 @@ public class ExchangeRequestService {
     public boolean acceptExchangeRequest(int requestId, int currentUserId) {
         ExchangeRequest request = exchangeRequestDAO.getRequestById(requestId);
         if (request == null) {
-            System.out.println("Request not found.");
+            System.out.println("❌ Request not found.");
             return false;
         }
         if (request.getReceiverId() != currentUserId) {
-            System.out.println("Unauthorized: Only the receiver can accept this request.");
+            System.out.println("❌ Unauthorized: Only the receiver can accept.");
             return false;
         }
         if (!"Pending".equalsIgnoreCase(request.getStatus())) {
-            System.out.println("Request is not in a pending state.");
+            System.out.println("❌ Request is not pending.");
             return false;
         }
         return exchangeRequestDAO.updateStatus(requestId, "Accepted");
@@ -43,15 +56,15 @@ public class ExchangeRequestService {
     public boolean rejectExchangeRequest(int requestId, int currentUserId) {
         ExchangeRequest request = exchangeRequestDAO.getRequestById(requestId);
         if (request == null) {
-            System.out.println("Request not found.");
+            System.out.println("❌ Request not found.");
             return false;
         }
         if (request.getReceiverId() != currentUserId) {
-            System.out.println("Unauthorized: Only the receiver can reject this request.");
+            System.out.println("❌ Unauthorized: Only the receiver can reject.");
             return false;
         }
         if (!"Pending".equalsIgnoreCase(request.getStatus())) {
-            System.out.println("Request is not in a pending state.");
+            System.out.println("❌ Request is not pending.");
             return false;
         }
         return exchangeRequestDAO.updateStatus(requestId, "Rejected");
@@ -60,15 +73,15 @@ public class ExchangeRequestService {
     public boolean cancelExchangeRequest(int requestId, int currentUserId) {
         ExchangeRequest request = exchangeRequestDAO.getRequestById(requestId);
         if (request == null) {
-            System.out.println("Request not found.");
+            System.out.println("❌ Request not found.");
             return false;
         }
         if (request.getSenderId() != currentUserId) {
-            System.out.println("Unauthorized: Only the sender can cancel this request.");
+            System.out.println("❌ Unauthorized: Only the sender can cancel.");
             return false;
         }
         if (!"Pending".equalsIgnoreCase(request.getStatus())) {
-            System.out.println("Only pending requests can be cancelled.");
+            System.out.println("❌ Only pending requests can be cancelled.");
             return false;
         }
         return exchangeRequestDAO.updateStatus(requestId, "Cancelled");
