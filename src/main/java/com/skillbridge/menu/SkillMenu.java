@@ -97,10 +97,24 @@ public class SkillMenu {
         if (skillId == -1) { System.out.println("❌ Invalid Skill ID."); return; }
 
         System.out.print("Skill Type (Teaching/Learning): ");
-        String type = scanner.nextLine();
+        String type = scanner.nextLine().trim();
+        type = type.substring(0, 1).toUpperCase() + type.substring(1).toLowerCase();
+
+        if (!type.equalsIgnoreCase("Teaching") && !type.equalsIgnoreCase("Learning")) {
+            System.out.println("❌ Invalid skill type. Must be Teaching or Learning.");
+            return;
+        }
 
         System.out.print("Skill Level (Beginner/Intermediate/Advanced): ");
-        String level = scanner.nextLine();
+        String level = scanner.nextLine().trim();
+        level = level.substring(0, 1).toUpperCase() + level.substring(1).toLowerCase();
+
+        if (!level.equalsIgnoreCase("Beginner")
+                && !level.equalsIgnoreCase("Intermediate")
+                && !level.equalsIgnoreCase("Advanced")) {
+            System.out.println("❌ Invalid skill level.");
+            return;
+        }
 
         if (userSkillService.addSkillToUser(currentUserId, skillId, type, level)) {
             System.out.println("✅ Skill added!");

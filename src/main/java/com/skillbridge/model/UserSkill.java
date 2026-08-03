@@ -54,7 +54,8 @@ public class UserSkill
     }
 
     public String getSkillType() {
-        return skillType.name(); // Converts Enum to String
+        String s = skillType.name();
+        return s.charAt(0) + s.substring(1).toLowerCase();
     }
 
     public void setSkillType(SkillType skillType) {
@@ -62,7 +63,8 @@ public class UserSkill
     }
 
     public String getSkillLevel() {
-        return skillLevel.name(); // Converts Enum to String
+        String s = skillLevel.name();
+        return s.charAt(0) + s.substring(1).toLowerCase();
     }
 
     public void setSkillLevel(SkillLevel skillLevel) {
