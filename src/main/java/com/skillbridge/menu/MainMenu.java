@@ -41,7 +41,9 @@ public class MainMenu {
                     handleRegister();
                     break;
                 case "3":
-                    System.out.println("Thank you for using SkillBridge. Goodbye!");
+                    System.out.println("==========================================");
+                    System.out.println(" Thank you for using SkillBridge. Goodbye!");
+                    System.out.println("==========================================");
                     running = false; // Breaks the loop and closes the app
                     break;
                 default:
