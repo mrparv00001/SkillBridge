@@ -6,6 +6,12 @@ import com.skillbridge.service.UserService;
 import com.skillbridge.util.SessionManager;
 import com.skillbridge.util.Validator;
 
+import com.skillbridge.model.Skill;
+import com.skillbridge.model.UserSkill;
+import com.skillbridge.service.SkillService;
+import com.skillbridge.service.UserSkillService;
+import java.util.List;
+
 import java.util.Scanner;
 
 public class DashboardMenu {
@@ -70,6 +76,36 @@ public class DashboardMenu {
         System.out.println("\n--- MY PROFILE ---");
         User user = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
         System.out.println(user.toString());
+
+        // ✅ NEW: Show user's added skills
+        System.out.println("\n--- MY SKILLS ---");
+        UserSkillService userSkillService = new UserSkillService();
+        SkillService skillService = new SkillService();
+
+        List<UserSkill> mySkills = userSkillService.getUserSkills(user.getUserId());
+
+        if (mySkills == null || mySkills.isEmpty()) {
+            System.out.println("ℹ️ No skills added yet. Go to Skill Menu to add skills!");
+        } else {
+            List<Skill> allSkills = skillService.getAllSkills();
+            System.out.println("Total Skills: " + mySkills.size());
+            System.out.println("---------------------------------");
+
+            for (UserSkill us : mySkills) {
+                String skillName = "Unknown";
+                if (allSkills != null) {
+                    for (Skill s : allSkills) {
+                        if (s.getSkillId() == us.getSkillId()) {
+                            skillName = s.getSkillName();
+                            break;
+                        }
+                    }
+                }
+                System.out.println("• " + skillName +
+                        " | Type: " + us.getSkillType() +
+                        " | Level: " + us.getSkillLevel());
+            }
+        }
     }
 
     private void updateProfile() {
