@@ -76,4 +76,8 @@ public class Validator {
     public static boolean isValidRating(int rating) {
         return rating >= 1 && rating <= 5;
     }
+
+    public static boolean isValidSemester(int semester) {
+        return semester >= 1 && semester <= 8;
+    }
 }

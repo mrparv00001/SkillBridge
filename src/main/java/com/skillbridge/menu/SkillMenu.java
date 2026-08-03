@@ -140,9 +140,12 @@ public class SkillMenu {
         int skillId = Validator.safeParseInt(scanner.nextLine());
         if (skillId == -1) { System.out.println("❌ Invalid Skill ID."); return; }
 
-        System.out.print("Enter Semester: ");
+        System.out.print("Enter Semester (1-8): ");
         int sem = Validator.safeParseInt(scanner.nextLine());
-        if (sem == -1) { System.out.println("❌ Invalid Semester."); return; }
+        if (!Validator.isValidSemester(sem)) {
+            System.out.println("❌ Invalid Semester. Must be between 1 and 8.");
+            return;
+        }
 
         List<User> results = searchService.searchStudentsBySemester(sem, skillId);
         printSearchResults(results);

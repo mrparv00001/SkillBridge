@@ -121,14 +121,14 @@ public class DashboardMenu {
         if (!dept.trim().isEmpty()) currentUser.setDepartment(dept);
 
         // UPGRADE: Safely parse semester without crashing
-        System.out.print("Enter New Semester: ");
+        System.out.print("Enter New Semester (1-8): ");
         String semInput = scanner.nextLine();
         if (!semInput.trim().isEmpty()) {
-            try {
-                int sem = Integer.parseInt(semInput);
+            int sem = Validator.safeParseInt(semInput);
+            if (Validator.isValidSemester(sem)) {
                 currentUser.setSemester(sem);
-            } catch (NumberFormatException e) {
-                System.out.println("❌ Invalid semester format. Skipping semester update.");
+            } else {
+                System.out.println("❌ Invalid semester. Must be between 1 and 8. Skipping.");
             }
         }
 

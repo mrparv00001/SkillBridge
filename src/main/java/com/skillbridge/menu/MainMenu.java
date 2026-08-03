@@ -2,6 +2,7 @@ package com.skillbridge.menu;
 
 import com.skillbridge.model.User;
 import com.skillbridge.service.AuthenticationService;
+import com.skillbridge.util.Validator;
 
 import java.util.Scanner;
 
@@ -80,13 +81,11 @@ public class MainMenu {
         System.out.print("Enter Department (e.g., Computer Science): ");
         String dept = scanner.nextLine();
 
-        System.out.print("Enter Semester (e.g., 3): ");
-        int semester = 0;
-        try {
-            semester = Integer.parseInt(scanner.nextLine());
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid semester. Setting to 1 by default.");
-            semester = 1;
+        System.out.print("Enter Semester (1-8): ");
+        int semester = Validator.safeParseInt(scanner.nextLine());
+        if (!Validator.isValidSemester(semester)) {
+            System.out.println("❌ Invalid semester. Must be between 1 and 8.");
+            return;
         }
 
         System.out.print("Enter Email: ");
