@@ -15,6 +15,7 @@ public class User {
     private String bio;
     private boolean isActive;
     private LocalDateTime createdAt;
+    private int credits; // NEW: Credit economy system
 
     // 1. No-argument constructor
     public User() {
@@ -36,7 +37,7 @@ public class User {
     // 3. All-arguments constructor (used when fetching from Database)
     public User(int userId, String fullName, String enrollmentNo, String department,
                 int semester, String email, String passwordHash, String phone,
-                String bio, boolean isActive, LocalDateTime createdAt) {
+                String bio, boolean isActive, LocalDateTime createdAt, int credits) {
         this.userId = userId;
         this.fullName = fullName;
         this.enrollmentNo = enrollmentNo;
@@ -48,9 +49,10 @@ public class User {
         this.bio = bio;
         this.isActive = isActive;
         this.createdAt = createdAt;
+        this.credits = credits;
     }
 
-    // Getters and Setters
+    // Existing Getters and Setters
     public int getUserId() { return userId; }
     public void setUserId(int userId) { this.userId = userId; }
 
@@ -84,6 +86,10 @@ public class User {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
+    // NEW: Credits Getter and Setter
+    public int getCredits() { return credits; }
+    public void setCredits(int credits) { this.credits = credits; }
+
     @Override
     public String toString() {
         return "User Profile: [" +
@@ -95,6 +101,7 @@ public class User {
                 ", Email='" + email + '\'' +
                 ", Phone='" + phone + '\'' +
                 ", Bio='" + bio + '\'' +
+                ", Credits=" + credits + // Displaying credits
                 ", Active=" + isActive +
                 ']';
     }
