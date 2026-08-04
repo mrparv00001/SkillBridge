@@ -8,11 +8,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
 
 public class UserDAO {
 
     public boolean createUser(User user) {
-        // NEW: Added credits column (defaulting to 50 on signup)
         String sql = "INSERT INTO Users (full_name, enrollment_no, department, semester, email, password_hash, phone, bio, credits) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
@@ -27,7 +28,7 @@ public class UserDAO {
             stmt.setString(6, user.getPasswordHash());
             stmt.setString(7, user.getPhone());
             stmt.setString(8, user.getBio());
-            stmt.setInt(9, 50); // Initial Sign-up Bonus Credits
+            stmt.setInt(9, 50);
 
             return stmt.executeUpdate() > 0;
 
@@ -37,7 +38,6 @@ public class UserDAO {
         }
     }
 
-    // NEW: Method to specifically update user credits after transactions
     public boolean updateUserCredits(int userId, int newBalance) {
         String sql = "UPDATE Users SET credits = ? WHERE user_id = ?";
         try (Connection conn = DBConnection.getConnection();
@@ -110,6 +110,25 @@ public class UserDAO {
         }
     }
 
+    public List<User> getTopUsersByCredits(int limit) {
+        List<User> topUsers = new ArrayList<>();
+        String sql = "SELECT * FROM Users WHERE is_active = true ORDER BY credits DESC LIMIT ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, limit);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    topUsers.add(mapResultSetToUser(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error fetching leaderboard data: " + e.getMessage());
+        }
+        return topUsers;
+    }
+
     private User mapResultSetToUser(ResultSet rs) throws SQLException {
         Timestamp dbTimestamp = rs.getTimestamp("created_at");
         java.time.LocalDateTime createdAt = (dbTimestamp != null) ? dbTimestamp.toLocalDateTime() : null;
@@ -126,7 +145,7 @@ public class UserDAO {
                 rs.getString("bio"),
                 rs.getBoolean("is_active"),
                 createdAt,
-                rs.getInt("credits") // NEW: Fetch credits
+                rs.getInt("credits")
         );
     }
 }
