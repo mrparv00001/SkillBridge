@@ -11,7 +11,6 @@ import com.skillbridge.model.UserSkill;
 import com.skillbridge.service.SkillService;
 import com.skillbridge.service.UserSkillService;
 import java.util.List;
-
 import java.util.Scanner;
 
 public class DashboardMenu {
@@ -40,9 +39,13 @@ public class DashboardMenu {
         boolean loggedIn = true;
 
         while (loggedIn && SessionManager.isLoggedIn()) {
-            User currentUser = SessionManager.getCurrentUser();
+            // Re-fetch the user to ensure Credits are always up-to-date
+            User currentUser = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
+            SessionManager.login(currentUser); // Refresh session
+
             System.out.println("\n=================================");
             System.out.println("   DASHBOARD - " + currentUser.getFullName().toUpperCase());
+            System.out.println("   💳 Credits Available: " + currentUser.getCredits()); // NEW: Show credits
             System.out.println("=================================");
             System.out.println("1. View Profile");
             System.out.println("2. Update Profile");
@@ -77,7 +80,6 @@ public class DashboardMenu {
         User user = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
         System.out.println(user.toString());
 
-        // ✅ NEW: Show user's added skills
         System.out.println("\n--- MY SKILLS ---");
         UserSkillService userSkillService = new UserSkillService();
         SkillService skillService = new SkillService();
@@ -120,7 +122,6 @@ public class DashboardMenu {
         String dept = scanner.nextLine();
         if (!dept.trim().isEmpty()) currentUser.setDepartment(dept);
 
-        // UPGRADE: Safely parse semester without crashing
         System.out.print("Enter New Semester (1-8): ");
         String semInput = scanner.nextLine();
         if (!semInput.trim().isEmpty()) {
@@ -132,7 +133,6 @@ public class DashboardMenu {
             }
         }
 
-        // UPGRADE: Use Validator to ensure phone is exactly 10 digits
         System.out.print("Enter New Phone (10 digits): ");
         String phone = scanner.nextLine();
         if (!phone.trim().isEmpty()) {
