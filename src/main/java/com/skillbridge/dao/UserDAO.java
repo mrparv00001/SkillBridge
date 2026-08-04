@@ -12,8 +12,9 @@ import java.sql.Timestamp;
 public class UserDAO {
 
     public boolean createUser(User user) {
-        String sql = "INSERT INTO Users (full_name, enrollment_no, department, semester, email, password_hash, phone, bio) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        // NEW: Added credits column (defaulting to 50 on signup)
+        String sql = "INSERT INTO Users (full_name, enrollment_no, department, semester, email, password_hash, phone, bio, credits) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -26,6 +27,7 @@ public class UserDAO {
             stmt.setString(6, user.getPasswordHash());
             stmt.setString(7, user.getPhone());
             stmt.setString(8, user.getBio());
+            stmt.setInt(9, 50); // Initial Sign-up Bonus Credits
 
             return stmt.executeUpdate() > 0;
 
@@ -35,18 +37,27 @@ public class UserDAO {
         }
     }
 
-    public User getUserByEmail(String email) {
-        String sql = "SELECT * FROM Users WHERE email = ?";
-
+    // NEW: Method to specifically update user credits after transactions
+    public boolean updateUserCredits(int userId, int newBalance) {
+        String sql = "UPDATE Users SET credits = ? WHERE user_id = ?";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, newBalance);
+            stmt.setInt(2, userId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.out.println("Error updating credits: " + e.getMessage());
+            return false;
+        }
+    }
 
+    public User getUserByEmail(String email) {
+        String sql = "SELECT * FROM Users WHERE email = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, email);
-            // MILLIMETER UPGRADE: Try-with-resources for ResultSet to prevent Memory Leaks
             try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return mapResultSetToUser(rs);
-                }
+                if (rs.next()) return mapResultSetToUser(rs);
             }
         } catch (SQLException e) {
             System.out.println("Error finding user by email: " + e.getMessage());
@@ -56,16 +67,11 @@ public class UserDAO {
 
     public User getUserByEnrollmentNo(String enrollmentNo) {
         String sql = "SELECT * FROM Users WHERE enrollment_no = ?";
-
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-
             stmt.setString(1, enrollmentNo);
-            // MILLIMETER UPGRADE: Prevent memory leak
             try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return mapResultSetToUser(rs);
-                }
+                if (rs.next()) return mapResultSetToUser(rs);
             }
         } catch (SQLException e) {
             System.out.println("Error finding user by enrollment number: " + e.getMessage());
@@ -75,16 +81,11 @@ public class UserDAO {
 
     public User getUserById(int userId) {
         String sql = "SELECT * FROM Users WHERE user_id = ?";
-
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-
             stmt.setInt(1, userId);
-            // MILLIMETER UPGRADE: Prevent memory leak
             try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return mapResultSetToUser(rs);
-                }
+                if (rs.next()) return mapResultSetToUser(rs);
             }
         } catch (SQLException e) {
             System.out.println("Error finding user by ID: " + e.getMessage());
@@ -94,19 +95,15 @@ public class UserDAO {
 
     public boolean updateUser(User user) {
         String sql = "UPDATE Users SET full_name = ?, department = ?, semester = ?, phone = ?, bio = ? WHERE user_id = ?";
-
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-
             stmt.setString(1, user.getFullName());
             stmt.setString(2, user.getDepartment());
             stmt.setInt(3, user.getSemester());
             stmt.setString(4, user.getPhone());
             stmt.setString(5, user.getBio());
             stmt.setInt(6, user.getUserId());
-
             return stmt.executeUpdate() > 0;
-
         } catch (SQLException e) {
             System.out.println("Error updating user profile: " + e.getMessage());
             return false;
@@ -128,7 +125,8 @@ public class UserDAO {
                 rs.getString("phone"),
                 rs.getString("bio"),
                 rs.getBoolean("is_active"),
-                createdAt
+                createdAt,
+                rs.getInt("credits") // NEW: Fetch credits
         );
     }
 }
