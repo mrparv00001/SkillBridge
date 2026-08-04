@@ -1,6 +1,8 @@
 package com.skillbridge.service;
 
+import com.skillbridge.dao.ExchangeRequestDAO;
 import com.skillbridge.dao.LearningSessionDAO;
+import com.skillbridge.model.ExchangeRequest;
 import com.skillbridge.model.LearningSession;
 import com.skillbridge.util.Validator;
 
@@ -9,9 +11,13 @@ import java.util.List;
 public class LearningSessionService {
 
     private LearningSessionDAO sessionDAO;
+    private ExchangeRequestDAO requestDAO;
+    private CreditService creditService; // NEW
 
     public LearningSessionService() {
         this.sessionDAO = new LearningSessionDAO();
+        this.requestDAO = new ExchangeRequestDAO();
+        this.creditService = new CreditService();
     }
 
     public boolean scheduleSession(LearningSession session) {
@@ -44,7 +50,7 @@ public class LearningSessionService {
             }
         }
 
-        // FIX: Check learner's time clash too
+        // Check learner's time clash
         List<LearningSession> learnerSessions = sessionDAO.getSessionsByUser(session.getLearnerId());
         for (LearningSession existing : learnerSessions) {
             if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
@@ -58,6 +64,24 @@ public class LearningSessionService {
             }
         }
 
+        // --- NEW: CREDIT SYSTEM TRANSACTION GATEWAY ---
+        ExchangeRequest request = requestDAO.getRequestById(session.getRequestId());
+        boolean isSwap = request != null && "Swap".equalsIgnoreCase(request.getExchangeType());
+
+        System.out.println("\n--- Processing Transaction ---");
+        boolean transactionSuccess = creditService.processTransaction(
+                session.getTeacherId(),
+                session.getLearnerId(),
+                session.getSkillId(),
+                isSwap
+        );
+
+        // If they don't have enough credits, completely block the scheduling
+        if (!transactionSuccess) {
+            return false;
+        }
+        System.out.println("------------------------------\n");
+
         return sessionDAO.scheduleSession(session);
     }
 
@@ -65,7 +89,6 @@ public class LearningSessionService {
         return sessionDAO.getSessionsByUser(userId);
     }
 
-    // FIX: Added authorization check
     public boolean completeSession(int sessionId, int currentUserId) {
         LearningSession session = sessionDAO.getSessionById(sessionId);
 
@@ -74,7 +97,6 @@ public class LearningSessionService {
             return false;
         }
 
-        // FIX: Only teacher or learner can complete
         if (session.getTeacherId() != currentUserId && session.getLearnerId() != currentUserId) {
             System.out.println("❌ Unauthorized: Only session participants can mark it complete.");
             return false;
@@ -93,7 +115,6 @@ public class LearningSessionService {
         return sessionDAO.markSessionCompleted(sessionId);
     }
 
-    // FIX: Added authorization check
     public boolean cancelSession(int sessionId, int currentUserId) {
         LearningSession session = sessionDAO.getSessionById(sessionId);
 
@@ -102,7 +123,6 @@ public class LearningSessionService {
             return false;
         }
 
-        // FIX: Only teacher or learner can cancel
         if (session.getTeacherId() != currentUserId && session.getLearnerId() != currentUserId) {
             System.out.println("❌ Unauthorized: Only session participants can cancel it.");
             return false;
@@ -113,6 +133,7 @@ public class LearningSessionService {
             return false;
         }
 
+        // NOTE: In a robust economy, you may want to refund credits here!
         return sessionDAO.updateSessionStatus(sessionId, "Cancelled");
     }
 }
