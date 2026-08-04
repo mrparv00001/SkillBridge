@@ -10,6 +10,7 @@ import com.skillbridge.model.Skill;
 import com.skillbridge.model.UserSkill;
 import com.skillbridge.service.SkillService;
 import com.skillbridge.service.UserSkillService;
+import com.skillbridge.service.LeaderboardService;
 import java.util.List;
 import java.util.Scanner;
 
@@ -18,6 +19,7 @@ public class DashboardMenu {
     private Scanner scanner;
     private UserService userService;
     private AuthenticationService authService;
+    private LeaderboardService leaderboardService;
 
     private SkillMenu skillMenu;
     private SessionMenu sessionMenu;
@@ -28,6 +30,7 @@ public class DashboardMenu {
         this.scanner = new Scanner(System.in);
         this.userService = new UserService();
         this.authService = new AuthenticationService();
+        this.leaderboardService = new LeaderboardService();
 
         this.skillMenu = new SkillMenu();
         this.sessionMenu = new SessionMenu();
@@ -39,13 +42,12 @@ public class DashboardMenu {
         boolean loggedIn = true;
 
         while (loggedIn && SessionManager.isLoggedIn()) {
-            // Re-fetch the user to ensure Credits are always up-to-date
             User currentUser = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
-            SessionManager.login(currentUser); // Refresh session
+            SessionManager.login(currentUser);
 
             System.out.println("\n=================================");
             System.out.println("   DASHBOARD - " + currentUser.getFullName().toUpperCase());
-            System.out.println("   💳 Credits Available: " + currentUser.getCredits()); // NEW: Show credits
+            System.out.println("   💳 Credits Available: " + currentUser.getCredits());
             System.out.println("=================================");
             System.out.println("1. View Profile");
             System.out.println("2. Update Profile");
@@ -53,7 +55,8 @@ public class DashboardMenu {
             System.out.println("4. Exchange Requests");
             System.out.println("5. Learning Sessions");
             System.out.println("6. Feedback & Ratings");
-            System.out.println("7. Logout");
+            System.out.println("7. View Global Leaderboard");
+            System.out.println("8. Logout");
             System.out.print("Choose an option: ");
 
             String choice = scanner.nextLine();
@@ -65,7 +68,8 @@ public class DashboardMenu {
                 case "4": requestMenu.showMenu(); break;
                 case "5": sessionMenu.showMenu(); break;
                 case "6": feedbackMenu.showMenu(); break;
-                case "7":
+                case "7": leaderboardService.displayLeaderboard(); break;
+                case "8":
                     authService.logout();
                     loggedIn = false;
                     break;
