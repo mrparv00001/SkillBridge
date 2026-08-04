@@ -6,29 +6,39 @@ import java.sql.SQLException;
 
 public class DBConnection {
 
-    private static final String URL =
+    // Flag to track environment (defaults to online)
+    private static boolean useLocalhost = false;
+
+    // --- ONLINE CREDENTIALS (TiDB Cloud) ---
+    private static final String ONLINE_URL =
             "jdbc:mysql://gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000/skillbridge?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3";
+    private static final String ONLINE_USER = "24cPrP7jfNiAnuf.root";
+    private static final String ONLINE_PASSWORD = "S1EnSarxsg8oMhzT";
 
-    private static final String USER =
-            "24cPrP7jfNiAnuf.root";
+    // --- LOCALHOST CREDENTIALS (XAMPP Default) ---
+    private static final String LOCAL_URL = "jdbc:mysql://localhost:3306/skillbridge";
+    private static final String LOCAL_USER = "root";
+    private static final String LOCAL_PASSWORD = ""; // Default XAMPP password is empty
 
-    private static final String PASSWORD =
-            "S1EnSarxsg8oMhzT";
+    // Method to set environment before getting connection
+    public static void setUseLocalhost(boolean isLocal) {
+        useLocalhost = isLocal;
+    }
 
     public static Connection getConnection() throws SQLException {
-        try {
-            // Attempt to connect to TiDB
-            Connection con = DriverManager.getConnection(URL, USER, PASSWORD);
-            System.out.println("✅ Connected Successfully!");
-            return con;
+        // Dynamically select credentials based on user's choice
+        String url = useLocalhost ? LOCAL_URL : ONLINE_URL;
+        String user = useLocalhost ? LOCAL_USER : ONLINE_USER;
+        String password = useLocalhost ? LOCAL_PASSWORD : ONLINE_PASSWORD;
 
+        try {
+            Connection con = DriverManager.getConnection(url, user, password);
+            System.out.println("✅ Connected Successfully to " + (useLocalhost ? "Localhost" : "Online Server") + "!");
+            return con;
         } catch (SQLException e) {
-            // Effective error logging: Tells you exactly what went wrong
             System.err.println("❌ Database Connection Failed!");
             System.err.println("Reason: " + e.getMessage());
             System.err.println("State: " + e.getSQLState());
-
-            // Re-throw the error so your DAOs know the connection failed
             throw e;
         }
     }
