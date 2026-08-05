@@ -84,7 +84,7 @@ public class AuthenticationService {
 
         loginAttempts.remove(email);
         SessionManager.login(user);
-        System.out.println("Login successful! Welcome, " + user.getFullName() + ".");
+
         return true;
     }
 

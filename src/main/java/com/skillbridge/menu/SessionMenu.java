@@ -52,42 +52,63 @@ public class SessionMenu {
 
         System.out.print("Enter Exchange Request ID: ");
         int requestId = Validator.safeParseInt(scanner.nextLine());
-        if (requestId == -1) { System.out.println("❌ Invalid Request ID."); return; }
+        if (requestId == -1) { System.out.println("Invalid Request ID."); return; }
 
         System.out.print("Enter Partner's User ID: ");
         int partnerId = Validator.safeParseInt(scanner.nextLine());
-        if (partnerId == -1) { System.out.println("❌ Invalid Partner ID."); return; }
+        if (partnerId == -1) { System.out.println("Invalid Partner ID."); return; }
 
         System.out.print("Enter Skill ID: ");
         int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("❌ Invalid Skill ID."); return; }
+        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
 
         System.out.print("Enter Date (YYYY-MM-DD): ");
         LocalDate date = Validator.safeParseDate(scanner.nextLine());
-        if (date == null) { System.out.println("❌ Invalid date. Use YYYY-MM-DD format."); return; }
+        if (date == null) { System.out.println("Invalid date. Use YYYY-MM-DD format."); return; }
 
         System.out.print("Enter Start Time (HH:MM): ");
         LocalTime startTime = Validator.safeParseTime(scanner.nextLine());
-        if (startTime == null) { System.out.println("❌ Invalid time. Use HH:MM 24-hour format."); return; }
+        if (startTime == null) { System.out.println("Invalid time. Use HH:MM 24-hour format."); return; }
 
         System.out.print("Enter End Time (HH:MM): ");
         LocalTime endTime = Validator.safeParseTime(scanner.nextLine());
-        if (endTime == null) { System.out.println("❌ Invalid time. Use HH:MM 24-hour format."); return; }
+        if (endTime == null) { System.out.println("Invalid time. Use HH:MM 24-hour format."); return; }
 
-        System.out.print("Mode (Online/Offline): ");
-        String mode = scanner.nextLine();
+        // Mode Selection (Number-based)
+        System.out.println("\nSelect Mode:");
+        System.out.println("  1. Online");
+        System.out.println("  2. Offline");
+        System.out.print("Choose (1 or 2): ");
+        int modeChoice = Validator.safeParseInt(scanner.nextLine());
 
-        System.out.print("Meeting Link (blank if Offline): ");
-        String link = scanner.nextLine();
+        String mode;
+        if (modeChoice == 1) {
+            mode = "Online";
+        } else if (modeChoice == 2) {
+            mode = "Offline";
+        } else {
+            System.out.println("Invalid choice. Please select 1 or 2.");
+            return;
+        }
 
-        System.out.print("Location (blank if Online): ");
-        String location = scanner.nextLine();
+        String link = "";
+        String location = "";
+
+        if (modeChoice == 1) {
+            // Online - Ask for meeting link only
+            System.out.print("Enter Meeting Link: ");
+            link = scanner.nextLine();
+        } else {
+            // Offline - Ask for location only
+            System.out.print("Enter Location: ");
+            location = scanner.nextLine();
+        }
 
         int myId = SessionManager.getCurrentUser().getUserId();
         LearningSession session = new LearningSession(requestId, myId, partnerId, skillId, date, startTime, endTime, mode, link, location);
 
         if (sessionService.scheduleSession(session)) {
-            System.out.println("✅ Session scheduled successfully!");
+            System.out.println("Session scheduled successfully!");
         }
     }
 
@@ -99,8 +120,20 @@ public class SessionMenu {
         if (sessions == null || sessions.isEmpty()) {
             System.out.println("ℹ️ No sessions yet.");
         } else {
+            int count = 1;
             for (LearningSession session : sessions) {
-                System.out.println(session.toString());
+                System.out.println("\n--- Session " + count + " ---");
+                System.out.println("Session ID  : " + session.getSessionId());
+                System.out.println("Date        : " + session.getSessionDate());
+                System.out.println("Time        : " + session.getStartTime() + " to " + session.getEndTime());
+                System.out.println("Mode        : " + session.getMode());
+                System.out.println("Status      : " + session.getStatus());
+                if (session.getMode().equalsIgnoreCase("Online")) {
+                    System.out.println("Meeting Link: " + session.getMeetingLink());
+                } else {
+                    System.out.println("Location    : " + session.getLocation());
+                }
+                count++;
             }
         }
     }

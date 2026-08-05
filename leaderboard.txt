@@ -1,0 +1,13 @@
+========================================
+       SKILLBRIDGE LEADERBOARD
+       (Top Peer Learners)
+========================================
+
+Rank: 1 | Rahul Sharma | Dept: Computer Science | Sem: 3 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+----------------------------------------
+Rank: 2 | Priya Singh | Dept: Computer Science | Sem: 3 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+----------------------------------------
+Rank: 3 | Amit Verma | Dept: Information Tech | Sem: 5 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+----------------------------------------
+
+Generated using Queue Data Structure

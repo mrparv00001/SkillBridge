@@ -38,7 +38,7 @@ public class FeedbackMenu {
                 case "2": handleViewFeedback(); break;
                 case "3": handleSkillWiseSummary(); break;
                 case "4": running = false; break;
-                default: System.out.println("❌ Invalid choice.");
+                default: System.out.println("Invalid choice.");
             }
         }
     }
@@ -49,21 +49,21 @@ public class FeedbackMenu {
 
         System.out.print("Enter Session ID: ");
         int sessionId = Validator.safeParseInt(scanner.nextLine());
-        if (sessionId == -1) { System.out.println("❌ Invalid Session ID."); return; }
+        if (sessionId == -1) { System.out.println("Invalid Session ID."); return; }
 
         System.out.print("Enter Reviewed User's ID: ");
         int reviewedId = Validator.safeParseInt(scanner.nextLine());
-        if (reviewedId == -1) { System.out.println("❌ Invalid User ID."); return; }
+        if (reviewedId == -1) { System.out.println("Invalid User ID."); return; }
 
         System.out.print("Enter Rating (1-5): ");
         int rating = Validator.safeParseInt(scanner.nextLine());
-        if (!Validator.isValidRating(rating)) { System.out.println("❌ Rating must be 1-5."); return; }
+        if (!Validator.isValidRating(rating)) { System.out.println("Rating must be 1-5."); return; }
 
         System.out.print("Enter Comment: ");
         String comment = scanner.nextLine();
 
         if (feedbackService.leaveFeedback(sessionId, currentUserId, reviewedId, rating, comment)) {
-            System.out.println("✅ Feedback submitted!");
+            System.out.println("Feedback submitted!");
         }
     }
 
@@ -73,11 +73,17 @@ public class FeedbackMenu {
         List<Feedback> feedbackList = feedbackService.getFeedbackForUser(currentUserId);
 
         if (feedbackList != null && !feedbackList.isEmpty()) {
+            int count = 1;
             for (Feedback fb : feedbackList) {
-                System.out.println("Session ID: " + fb.getSessionId() +
-                        " | Rating: " + fb.getRating() + "/5" +
-                        " | Comment: " + fb.getComment() +
-                        " | Date: " + fb.getFeedbackDate());
+                String comment = (fb.getComment() != null && !fb.getComment().trim().isEmpty())
+                        ? fb.getComment() : "No comment provided";
+
+                System.out.println("\n--- Feedback " + count + " ---");
+                System.out.println("Session ID  : " + fb.getSessionId());
+                System.out.println("Rating      : " + fb.getRating() + "/5");
+                System.out.println("Comment     : " + comment);
+                System.out.println("Date        : " + fb.getFeedbackDate());
+                count++;
             }
         }
     }
@@ -88,7 +94,7 @@ public class FeedbackMenu {
         List<String> summary = feedbackService.getSkillWiseFeedbackSummary(currentUserId);
 
         if (summary == null || summary.isEmpty()) {
-            System.out.println("ℹ️ No skill-wise feedback yet.");
+            System.out.println("No skill-wise feedback yet.");
         } else {
             for (String line : summary) {
                 System.out.println(line);

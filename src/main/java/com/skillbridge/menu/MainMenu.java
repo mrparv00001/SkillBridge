@@ -10,15 +10,16 @@ public class MainMenu {
 
     private Scanner scanner;
     private AuthenticationService authService;
-    private DashboardMenu dashboardMenu; // The next screen
+    private DashboardMenu dashboardMenu;
+    private ManagerMenu managerMenu;
 
     public MainMenu() {
         this.scanner = new Scanner(System.in);
         this.authService = new AuthenticationService();
         this.dashboardMenu = new DashboardMenu();
+        this.managerMenu = new ManagerMenu();
     }
 
-    // 1. The main loop that keeps the menu running
     public void start() {
         boolean running = true;
 
@@ -26,9 +27,10 @@ public class MainMenu {
             System.out.println("\n=================================");
             System.out.println("   WELCOME TO SKILLBRIDGE");
             System.out.println("=================================");
-            System.out.println("1. Login");
-            System.out.println("2. Register");
-            System.out.println("3. Exit Application");
+            System.out.println("1. Login (Student)");
+            System.out.println("2. Register (Student)");
+            System.out.println("3. Manager Portal");
+            System.out.println("4. Exit Application");
             System.out.print("Choose an option: ");
 
             String choice = scanner.nextLine();
@@ -41,38 +43,37 @@ public class MainMenu {
                     handleRegister();
                     break;
                 case "3":
+                    managerMenu.start();
+                    break;
+                case "4":
                     System.out.println("==========================================");
                     System.out.println(" Thank you for using SkillBridge. Goodbye!");
                     System.out.println("==========================================");
-                    running = false; // Breaks the loop and closes the app
+                    running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please type 1, 2, or 3.");
+                    System.out.println("Invalid choice. Please type 1, 2, 3, or 4.");
             }
         }
     }
 
-    // 2. Collects email and password, then tries to log in
     private void handleLogin() {
-        System.out.println("\n--- LOGIN ---");
+        System.out.println("\n--- STUDENT LOGIN ---");
         System.out.print("Enter Email: ");
         String email = scanner.nextLine();
 
         System.out.print("Enter Password: ");
         String password = scanner.nextLine();
 
-        // Ask the service to check the credentials
         boolean isSuccess = authService.login(email, password);
 
         if (isSuccess) {
-            // If login works, send them to the Dashboard screen!
             dashboardMenu.showDashboard();
         }
     }
 
-    // 3. Collects all details to create a new account
     private void handleRegister() {
-        System.out.println("\n--- REGISTER NEW ACCOUNT ---");
+        System.out.println("\n--- REGISTER NEW STUDENT ACCOUNT ---");
 
         System.out.print("Enter Full Name: ");
         String name = scanner.nextLine();
@@ -86,7 +87,7 @@ public class MainMenu {
         System.out.print("Enter Semester (1-8): ");
         int semester = Validator.safeParseInt(scanner.nextLine());
         if (!Validator.isValidSemester(semester)) {
-            System.out.println("❌ Invalid semester. Must be between 1 and 8.");
+            System.out.println("Invalid semester. Must be between 1 and 8.");
             return;
         }
 
@@ -102,14 +103,12 @@ public class MainMenu {
         System.out.print("Write a short Bio about yourself: ");
         String bio = scanner.nextLine();
 
-        // Pack all answers into a new User form
         User newUser = new User(name, enrollmentNo, dept, semester, email, password, phone, bio);
 
-        // Ask the service to save the new user
         boolean isSuccess = authService.register(newUser);
 
         if (isSuccess) {
-            System.out.println("Registration successful! You can now login.");
+            System.out.println("\nRegistration successful! You start with 50 credits.");
         } else {
             System.out.println("Registration failed. Please try again.");
         }
