@@ -1,0 +1,4274 @@
+﻿
+
+========== FILE: Main.java ==========
+
+package com.skillbridge;
+
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.menu.MainMenu;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("==========================================");
+        System.out.println(" Welcome to SkillBridge Platform");
+        System.out.println(" Peer Learning & Skill Exchange System");
+        System.out.println("==========================================");
+
+        // Test database connection on startup
+        try (Connection conn = DBConnection.getConnection()) {
+            if (conn != null && !conn.isClosed()) {
+
+            } else {
+                System.err.println("Failed to connect to the database.");
+                return;
+            }
+        } catch (SQLException e) {
+            System.err.println("Database connection error: " + e.getMessage());
+            System.err.println("Make sure XAMPP Apache and MySQL are running!");
+            return;
+        }
+
+        // Launch the application Main Menu
+        MainMenu mainMenu = new MainMenu();
+        mainMenu.start();
+    }
+}
+
+
+========== FILE: ExchangeRequestDAO.java ==========
+
+package com.skillbridge.dao;
+
+import com.skillbridge.model.ExchangeRequest;
+import com.skillbridge.database.DBConnection;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ExchangeRequestDAO {
+
+    public boolean createRequest(ExchangeRequest request) {
+        String sql = "INSERT INTO ExchangeRequests (sender_id, receiver_id, requested_skill_id, exchange_type, message, status) VALUES (?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, request.getSenderId());
+            stmt.setInt(2, request.getReceiverId());
+            stmt.setInt(3, request.getRequestedSkillId());
+            stmt.setString(4, request.getExchangeType());
+            stmt.setString(5, request.getMessage());
+            stmt.setString(6, "Pending");
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean updateStatus(int requestId, String status) {
+        String sql = "UPDATE ExchangeRequests SET status = ? WHERE request_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, status);
+            stmt.setInt(2, requestId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public ExchangeRequest getRequestById(int requestId) {
+        String sql = "SELECT * FROM ExchangeRequests WHERE request_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, requestId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return mapResultSetToExchangeRequest(rs);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public List<ExchangeRequest> getRequestsByUserId(int userId) {
+        List<ExchangeRequest> requests = new ArrayList<>();
+        String sql = "SELECT * FROM ExchangeRequests WHERE sender_id = ? OR receiver_id = ? ORDER BY request_date DESC";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            stmt.setInt(2, userId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                requests.add(mapResultSetToExchangeRequest(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return requests;
+    }
+
+    private ExchangeRequest mapResultSetToExchangeRequest(ResultSet rs) throws SQLException {
+        return new ExchangeRequest(
+                rs.getInt("request_id"),
+                rs.getInt("sender_id"),
+                rs.getInt("receiver_id"),
+                rs.getInt("requested_skill_id"),
+                rs.getString("exchange_type"),
+                rs.getString("message"),
+                rs.getString("status"),
+                rs.getTimestamp("request_date")
+        );
+    }
+}
+
+
+========== FILE: FeedbackDAO.java ==========
+
+package com.skillbridge.dao;
+
+import com.skillbridge.model.Feedback;
+import com.skillbridge.database.DBConnection;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class FeedbackDAO {
+
+    public boolean submitFeedback(Feedback feedback) {
+        String sql = "INSERT INTO Feedback (session_id, reviewer_id, reviewed_user_id, rating, comment) VALUES (?, ?, ?, ?, ?)";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, feedback.getSessionId());
+            stmt.setInt(2, feedback.getReviewerId());
+            stmt.setInt(3, feedback.getReviewedUserId());
+            stmt.setInt(4, feedback.getRating());
+            stmt.setString(5, feedback.getComment());
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public List<Feedback> getFeedbackByReviewedUser(int reviewedUserId) {
+        List<Feedback> feedbackList = new ArrayList<>();
+        String sql = "SELECT * FROM Feedback WHERE reviewed_user_id = ? ORDER BY feedback_date DESC";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, reviewedUserId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                feedbackList.add(mapResultSetToFeedback(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return feedbackList;
+    }
+
+    /**
+     * Skill-wise Feedback Query (Note 1)
+     * Retrieves feedback details along with skill details via SQL Joins.
+     */
+    public List<String> getSkillWiseFeedbackForUser(int userId) {
+        List<String> results = new ArrayList<>();
+        String sql = "SELECT s.skill_name, f.rating, f.comment, f.feedback_date " +
+                "FROM Feedback f " +
+                "JOIN LearningSessions ls ON f.session_id = ls.session_id " +
+                "JOIN Skills s ON ls.skill_id = s.skill_id " +
+                "WHERE f.reviewed_user_id = ? " +
+                "ORDER BY s.skill_name, f.feedback_date DESC";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String line = String.format("Skill: %s | Rating: %d/5 | Comment: %s | Date: %s",
+                        rs.getString("skill_name"),
+                        rs.getInt("rating"),
+                        rs.getString("comment"),
+                        rs.getTimestamp("feedback_date").toString());
+                results.add(line);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return results;
+    }
+
+    private Feedback mapResultSetToFeedback(ResultSet rs) throws SQLException {
+        return new Feedback(
+                rs.getInt("feedback_id"),
+                rs.getInt("session_id"),
+                rs.getInt("reviewer_id"),
+                rs.getInt("reviewed_user_id"),
+                rs.getInt("rating"),
+                rs.getString("comment"),
+                rs.getTimestamp("feedback_date")
+        );
+    }
+}
+
+
+========== FILE: LearningSessionDAO.java ==========
+
+package com.skillbridge.dao;
+
+import com.skillbridge.model.LearningSession;
+import com.skillbridge.database.DBConnection;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class LearningSessionDAO {
+
+    // 1. Save a new session to the database
+    public boolean scheduleSession(LearningSession session) {
+        String sql = "INSERT INTO LearningSessions (request_id, teacher_id, learner_id, skill_id, " +
+                "session_date, start_time, end_time, mode, meeting_link, location, status) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Scheduled')";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, session.getRequestId());
+            stmt.setInt(2, session.getTeacherId());
+            stmt.setInt(3, session.getLearnerId());
+            stmt.setInt(4, session.getSkillId());
+
+            // Convert Java Dates/Times to SQL Dates/Times
+            stmt.setDate(5, Date.valueOf(session.getSessionDate()));
+            stmt.setTime(6, Time.valueOf(session.getStartTime()));
+            stmt.setTime(7, Time.valueOf(session.getEndTime()));
+
+            stmt.setString(8, session.getMode());
+            stmt.setString(9, session.getMeetingLink());
+            stmt.setString(10, session.getLocation());
+
+            int rowsSaved = stmt.executeUpdate();
+            return rowsSaved > 0;
+
+        } catch (SQLException e) {
+            System.out.println("Error scheduling session in DB: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // 2. Fetch all sessions for a user (whether they taught or learned)
+    public List<LearningSession> getSessionsByUser(int userId) {
+        List<LearningSession> sessions = new ArrayList<>();
+        // Query looks for sessions where user is either teacher OR learner, sorted newest first
+        String sql = "SELECT * FROM LearningSessions WHERE teacher_id = ? OR learner_id = ? ORDER BY session_date DESC";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, userId);
+            stmt.setInt(2, userId);
+            ResultSet rs = stmt.executeQuery();
+
+            // Loop through all results and add them to our list
+            while (rs.next()) {
+                sessions.add(mapResultSetToSession(rs));
+            }
+        } catch (SQLException e) {
+            System.out.println("Error fetching user sessions: " + e.getMessage());
+        }
+        return sessions;
+    }
+
+    // 3. Find a single session by its ID
+    public LearningSession getSessionById(int sessionId) {
+        String sql = "SELECT * FROM LearningSessions WHERE session_id = ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, sessionId);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                return mapResultSetToSession(rs);
+            }
+        } catch (SQLException e) {
+            System.out.println("Error finding session by ID: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // 4. Mark a session as 'Completed' and record the current time
+    public boolean markSessionCompleted(int sessionId) {
+        // CURRENT_TIMESTAMP is a MySQL command to get the exact current time
+        String sql = "UPDATE LearningSessions SET status = 'Completed', completed_at = CURRENT_TIMESTAMP WHERE session_id = ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, sessionId);
+            int rowsUpdated = stmt.executeUpdate();
+            return rowsUpdated > 0;
+
+        } catch (SQLException e) {
+            System.out.println("Error completing session: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // 5. Change the status of a session (e.g., to 'Cancelled')
+    public boolean updateSessionStatus(int sessionId, String newStatus) {
+        String sql = "UPDATE LearningSessions SET status = ? WHERE session_id = ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, newStatus);
+            stmt.setInt(2, sessionId);
+
+            int rowsUpdated = stmt.executeUpdate();
+            return rowsUpdated > 0;
+
+        } catch (SQLException e) {
+            System.out.println("Error updating session status: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // --- Helper Method ---
+    // Converts a database row into a Java LearningSession object
+    private LearningSession mapResultSetToSession(ResultSet rs) throws SQLException {
+
+        // Safely check if completed_at is null before converting
+        Timestamp dbTimestamp = rs.getTimestamp("completed_at");
+        java.time.LocalDateTime completedAt = (dbTimestamp != null) ? dbTimestamp.toLocalDateTime() : null;
+
+        return new LearningSession(
+                rs.getInt("session_id"),
+                rs.getInt("request_id"),
+                rs.getInt("teacher_id"),
+                rs.getInt("learner_id"),
+                rs.getInt("skill_id"),
+                rs.getDate("session_date").toLocalDate(),
+                rs.getTime("start_time").toLocalTime(),
+                rs.getTime("end_time").toLocalTime(),
+                rs.getString("mode"),
+                rs.getString("meeting_link"),
+                rs.getString("location"),
+                rs.getString("status"),
+                completedAt
+        );
+    }
+}
+
+
+========== FILE: ManagerDAO.java ==========
+
+package com.skillbridge.dao;
+
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.model.*;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ManagerDAO {
+
+    public Manager getManagerByUsername(String username) {
+        String sql = "SELECT * FROM Managers WHERE username = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                Timestamp ts = rs.getTimestamp("created_at");
+                return new Manager(
+                        rs.getInt("manager_id"),
+                        rs.getString("username"),
+                        rs.getString("password_hash"),
+                        rs.getString("full_name"),
+                        rs.getString("email"),
+                        ts != null ? ts.toLocalDateTime() : null
+                );
+            }
+        } catch (SQLException e) {
+            System.err.println("Error finding manager: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public List<User> getAllUsers() {
+        List<User> users = new ArrayList<>();
+        String sql = "SELECT * FROM Users ORDER BY user_id";
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                Timestamp ts = rs.getTimestamp("created_at");
+                User u = new User(
+                        rs.getInt("user_id"),
+                        rs.getString("full_name"),
+                        rs.getString("enrollment_no"),
+                        rs.getString("department"),
+                        rs.getInt("semester"),
+                        rs.getString("email"),
+                        rs.getString("password_hash"),
+                        rs.getString("phone"),
+                        rs.getString("bio"),
+                        rs.getBoolean("is_active"),
+                        ts != null ? ts.toLocalDateTime() : null,
+                        rs.getInt("credits")
+                );
+                users.add(u);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching users: " + e.getMessage());
+        }
+        return users;
+    }
+
+    public List<Skill> getAllSkills() {
+        List<Skill> skills = new ArrayList<>();
+        String sql = "SELECT * FROM Skills ORDER BY skill_id";
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                skills.add(new Skill(
+                        rs.getInt("skill_id"),
+                        rs.getString("skill_name"),
+                        rs.getString("category"),
+                        rs.getString("description")
+                ));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching skills: " + e.getMessage());
+        }
+        return skills;
+    }
+
+    public List<ExchangeRequest> getAllRequests() {
+        List<ExchangeRequest> requests = new ArrayList<>();
+        String sql = "SELECT * FROM ExchangeRequests ORDER BY request_date DESC";
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                requests.add(new ExchangeRequest(
+                        rs.getInt("request_id"),
+                        rs.getInt("sender_id"),
+                        rs.getInt("receiver_id"),
+                        rs.getInt("requested_skill_id"),
+                        rs.getString("exchange_type"),
+                        rs.getString("message"),
+                        rs.getString("status"),
+                        rs.getTimestamp("request_date")
+                ));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching requests: " + e.getMessage());
+        }
+        return requests;
+    }
+
+    public List<LearningSession> getAllSessions() {
+        List<LearningSession> sessions = new ArrayList<>();
+        String sql = "SELECT * FROM LearningSessions ORDER BY session_date DESC";
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                Timestamp ts = rs.getTimestamp("completed_at");
+                sessions.add(new LearningSession(
+                        rs.getInt("session_id"),
+                        rs.getInt("request_id"),
+                        rs.getInt("teacher_id"),
+                        rs.getInt("learner_id"),
+                        rs.getInt("skill_id"),
+                        rs.getDate("session_date").toLocalDate(),
+                        rs.getTime("start_time").toLocalTime(),
+                        rs.getTime("end_time").toLocalTime(),
+                        rs.getString("mode"),
+                        rs.getString("meeting_link"),
+                        rs.getString("location"),
+                        rs.getString("status"),
+                        ts != null ? ts.toLocalDateTime() : null
+                ));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching sessions: " + e.getMessage());
+        }
+        return sessions;
+    }
+
+    public List<Feedback> getAllFeedback() {
+        List<Feedback> feedbackList = new ArrayList<>();
+        String sql = "SELECT * FROM Feedback ORDER BY feedback_date DESC";
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                feedbackList.add(new Feedback(
+                        rs.getInt("feedback_id"),
+                        rs.getInt("session_id"),
+                        rs.getInt("reviewer_id"),
+                        rs.getInt("reviewed_user_id"),
+                        rs.getInt("rating"),
+                        rs.getString("comment"),
+                        rs.getTimestamp("feedback_date")
+                ));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching feedback: " + e.getMessage());
+        }
+        return feedbackList;
+    }
+}
+
+
+========== FILE: SkillDAO.java ==========
+
+package com.skillbridge.dao;
+
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.model.Skill;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class SkillDAO {
+
+    public List<Skill> getAllSkills() {
+        List<Skill> skills = new ArrayList<>();
+        // Using skill_name to match the database
+        String query = "SELECT * FROM Skills ORDER BY skill_name ASC";
+
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+
+            while (rs.next()) {
+                // Re-added the description field!
+                Skill skill = new Skill(
+                        rs.getInt("skill_id"),
+                        rs.getString("skill_name"),
+                        rs.getString("category"),
+                        rs.getString("description")
+                );
+                skills.add(skill);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Error fetching skills: " + e.getMessage(), e);
+        }
+        return skills;
+    }
+
+    public boolean addSkill(Skill skill) {
+        // Re-added description to the INSERT statement
+        String query = "INSERT INTO Skills (skill_name, category, description) VALUES (?, ?, ?)";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setString(1, skill.getSkillName());
+            pstmt.setString(2, skill.getCategory());
+            pstmt.setString(3, skill.getDescription()); // Setting the description
+
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+}
+
+
+========== FILE: UserDAO.java ==========
+
+package com.skillbridge.dao;
+
+import com.skillbridge.model.User;
+import com.skillbridge.database.DBConnection;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
+
+public class UserDAO {
+
+    public boolean createUser(User user) {
+        String sql = "INSERT INTO Users (full_name, enrollment_no, department, semester, email, password_hash, phone, bio, credits) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, user.getFullName());
+            stmt.setString(2, user.getEnrollmentNo());
+            stmt.setString(3, user.getDepartment());
+            stmt.setInt(4, user.getSemester());
+            stmt.setString(5, user.getEmail());
+            stmt.setString(6, user.getPasswordHash());
+            stmt.setString(7, user.getPhone());
+            stmt.setString(8, user.getBio());
+            stmt.setInt(9, 50);
+
+            return stmt.executeUpdate() > 0;
+
+        } catch (SQLException e) {
+            System.out.println("Error saving user to database: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean updateUserCredits(int userId, int newBalance) {
+        String sql = "UPDATE Users SET credits = ? WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, newBalance);
+            stmt.setInt(2, userId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.out.println("Error updating credits: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public User getUserByEmail(String email) {
+        String sql = "SELECT * FROM Users WHERE email = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, email);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) return mapResultSetToUser(rs);
+            }
+        } catch (SQLException e) {
+            System.out.println("Error finding user by email: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public User getUserByEnrollmentNo(String enrollmentNo) {
+        String sql = "SELECT * FROM Users WHERE enrollment_no = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, enrollmentNo);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) return mapResultSetToUser(rs);
+            }
+        } catch (SQLException e) {
+            System.out.println("Error finding user by enrollment number: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public User getUserById(int userId) {
+        String sql = "SELECT * FROM Users WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) return mapResultSetToUser(rs);
+            }
+        } catch (SQLException e) {
+            System.out.println("Error finding user by ID: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public boolean updateUser(User user) {
+        String sql = "UPDATE Users SET full_name = ?, department = ?, semester = ?, phone = ?, bio = ? WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, user.getFullName());
+            stmt.setString(2, user.getDepartment());
+            stmt.setInt(3, user.getSemester());
+            stmt.setString(4, user.getPhone());
+            stmt.setString(5, user.getBio());
+            stmt.setInt(6, user.getUserId());
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.out.println("Error updating user profile: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public List<User> getTopUsersByCredits(int limit) {
+        List<User> topUsers = new ArrayList<>();
+        String sql = "SELECT * FROM Users WHERE is_active = true ORDER BY credits DESC LIMIT ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, limit);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    topUsers.add(mapResultSetToUser(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error fetching leaderboard data: " + e.getMessage());
+        }
+        return topUsers;
+    }
+
+    private User mapResultSetToUser(ResultSet rs) throws SQLException {
+        Timestamp dbTimestamp = rs.getTimestamp("created_at");
+        java.time.LocalDateTime createdAt = (dbTimestamp != null) ? dbTimestamp.toLocalDateTime() : null;
+
+        return new User(
+                rs.getInt("user_id"),
+                rs.getString("full_name"),
+                rs.getString("enrollment_no"),
+                rs.getString("department"),
+                rs.getInt("semester"),
+                rs.getString("email"),
+                rs.getString("password_hash"),
+                rs.getString("phone"),
+                rs.getString("bio"),
+                rs.getBoolean("is_active"),
+                createdAt,
+                rs.getInt("credits")
+        );
+    }
+}
+
+
+========== FILE: UserSkillDAO.java ==========
+
+package com.skillbridge.dao;
+
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.model.UserSkill;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class UserSkillDAO {
+
+    public boolean addUserSkill(UserSkill userSkill) {
+        String sql = "INSERT INTO UserSkills (user_id, skill_id, skill_type, skill_level) VALUES (?, ?, ?, ?)";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, userSkill.getUserId());
+            stmt.setInt(2, userSkill.getSkillId());
+            // Since Member 2's getters return Strings, we can use them directly
+            stmt.setString(3, userSkill.getSkillType());
+            stmt.setString(4, userSkill.getSkillLevel());
+
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error adding skill to user profile: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public List<UserSkill> findUsersBySkill(int skillId, String skillType) {
+        List<UserSkill> matchedUsers = new ArrayList<>();
+        String sql = "SELECT * FROM UserSkills WHERE skill_id = ? AND skill_type = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, skillId);
+            stmt.setString(2, skillType);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                UserSkill userSkill = new UserSkill(
+                        rs.getInt("user_skill_id"),
+                        rs.getInt("skill_id"),
+                        rs.getInt("user_id"),
+                        UserSkill.SkillType.valueOf(rs.getString("skill_type").toUpperCase()),
+                        UserSkill.SkillLevel.valueOf(rs.getString("skill_level").toUpperCase()),
+                        rs.getBoolean("is_active") // Member 2 had this hardcoded to true, fixed it to pull from DB
+                );
+                matchedUsers.add(userSkill);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error: " + e.getMessage());
+        }
+        return matchedUsers;
+    }
+
+    // --- MISSING METHOD 1 ADDED ---
+    public List<UserSkill> getSkillsByUserId(int userId) {
+        List<UserSkill> userSkills = new ArrayList<>();
+        String sql = "SELECT * FROM UserSkills WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                UserSkill userSkill = new UserSkill(
+                        rs.getInt("user_skill_id"),
+                        rs.getInt("skill_id"),
+                        rs.getInt("user_id"),
+                        UserSkill.SkillType.valueOf(rs.getString("skill_type").toUpperCase()),
+                        UserSkill.SkillLevel.valueOf(rs.getString("skill_level").toUpperCase()),
+                        rs.getBoolean("is_active")
+                );
+                userSkills.add(userSkill);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching user skills: " + e.getMessage());
+        }
+        return userSkills;
+    }
+
+    // --- MISSING METHOD 2 ADDED ---
+    public boolean deleteUserSkill(int userSkillId) {
+        String sql = "DELETE FROM UserSkills WHERE user_skill_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userSkillId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error deleting user skill: " + e.getMessage());
+            return false;
+        }
+    }
+}
+
+
+========== FILE: DBConnection.java ==========
+
+package com.skillbridge.database;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class DBConnection {
+
+    // LOCALHOST XAMPP Configuration
+    private static final String URL = "jdbc:mysql://localhost:3306/skillbridge";
+    private static final String USER = "root";
+    private static final String PASSWORD = ""; // XAMPP default is empty
+
+    public static Connection getConnection() throws SQLException {
+        try {
+            Connection con = DriverManager.getConnection(URL, USER, PASSWORD);
+            // Silent connection - no print statement
+            return con;
+        } catch (SQLException e) {
+            System.err.println("Database Connection Failed!");
+            System.err.println("Reason: " + e.getMessage());
+            System.err.println("TIP: Make sure XAMPP MySQL is running!");
+            throw e;
+        }
+    }
+}
+
+
+========== FILE: DashboardMenu.java ==========
+
+package com.skillbridge.menu;
+
+import com.skillbridge.model.User;
+import com.skillbridge.service.AuthenticationService;
+import com.skillbridge.service.UserService;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+import com.skillbridge.model.Skill;
+import com.skillbridge.model.UserSkill;
+import com.skillbridge.service.SkillService;
+import com.skillbridge.service.UserSkillService;
+import com.skillbridge.service.LeaderboardService;
+import java.util.List;
+import java.util.Scanner;
+import com.skillbridge.model.ExchangeRequest;
+import com.skillbridge.service.ExchangeRequestService;
+import java.util.Stack;
+
+public class DashboardMenu {
+
+    private Scanner scanner;
+    private UserService userService;
+    private AuthenticationService authService;
+    private LeaderboardService leaderboardService;
+
+    private SkillMenu skillMenu;
+    private SessionMenu sessionMenu;
+    private ExchangeRequestMenu requestMenu;
+    private FeedbackMenu feedbackMenu;
+    private ExchangeRequestService exchangeRequestService;
+
+    public DashboardMenu() {
+        this.scanner = new Scanner(System.in);
+        this.userService = new UserService();
+        this.authService = new AuthenticationService();
+        this.leaderboardService = new LeaderboardService();
+
+        this.skillMenu = new SkillMenu();
+        this.sessionMenu = new SessionMenu();
+        this.requestMenu = new ExchangeRequestMenu();
+        this.feedbackMenu = new FeedbackMenu();
+        this.exchangeRequestService = new ExchangeRequestService();
+    }
+
+    public void showDashboard() {
+        boolean loggedIn = true;
+
+        while (loggedIn && SessionManager.isLoggedIn()) {
+            User currentUser = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
+            SessionManager.login(currentUser);
+
+            showNotificationPanel(currentUser.getUserId());
+
+            System.out.println("\n=================================");
+            System.out.println("   DASHBOARD - " + currentUser.getFullName().toUpperCase());
+            System.out.println("   ðŸ’³ Credits Available: " + currentUser.getCredits());
+            System.out.println("=================================");
+            System.out.println("1. View Profile");
+            System.out.println("2. Update Profile");
+            System.out.println("3. Skill Management & Search");
+            System.out.println("4. Exchange Requests");
+            System.out.println("5. Learning Sessions");
+            System.out.println("6. Feedback & Ratings");
+            System.out.println("7. View Global Leaderboard");
+            System.out.println("8. Logout");
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1": viewProfile(); break;
+                case "2": updateProfile(); break;
+                case "3": skillMenu.showMenu(); break;
+                case "4": requestMenu.showMenu(); break;
+                case "5": sessionMenu.showMenu(); break;
+                case "6": feedbackMenu.showMenu(); break;
+                case "7": leaderboardService.displayLeaderboard(); break;
+                case "8":
+                    authService.logout();
+                    loggedIn = false;
+                    break;
+                default:
+                    System.out.println("Invalid choice. Please try again.");
+            }
+        }
+    }
+
+    private void viewProfile() {
+        System.out.println("\n--- MY PROFILE ---");
+        User user = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
+
+        // Display profile line-by-line (clean format)
+        System.out.println("User ID         : " + user.getUserId());
+        System.out.println("Name            : " + user.getFullName());
+        System.out.println("Enrollment No   : " + user.getEnrollmentNo());
+        System.out.println("Department      : " + user.getDepartment());
+        System.out.println("Semester        : " + user.getSemester());
+        System.out.println("Email           : " + user.getEmail());
+        System.out.println("Phone           : " + user.getPhone());
+        System.out.println("Bio             : " + user.getBio());
+        System.out.println("Credits         : " + user.getCredits());
+        System.out.println("Status          : " + (user.isActive() ? "Active" : "Inactive"));
+
+        // Display skills
+        System.out.println("\n--- MY SKILLS ---");
+        UserSkillService userSkillService = new UserSkillService();
+        SkillService skillService = new SkillService();
+
+        List<UserSkill> mySkills = userSkillService.getUserSkills(user.getUserId());
+
+        if (mySkills == null || mySkills.isEmpty()) {
+            System.out.println("No skills added yet. Go to Skill Menu to add skills!");
+        } else {
+            List<Skill> allSkills = skillService.getAllSkills();
+            System.out.println("Total Skills: " + mySkills.size());
+            System.out.println("---------------------------------");
+
+            int count = 1;
+            for (UserSkill us : mySkills) {
+                String skillName = "Unknown";
+                if (allSkills != null) {
+                    for (Skill s : allSkills) {
+                        if (s.getSkillId() == us.getSkillId()) {
+                            skillName = s.getSkillName();
+                            break;
+                        }
+                    }
+                }
+                System.out.println(count + ". " + skillName);
+                System.out.println("   Type  : " + us.getSkillType());
+                System.out.println("   Level : " + us.getSkillLevel());
+                count++;
+            }
+        }
+    }
+
+    private void updateProfile() {
+        System.out.println("\n--- UPDATE PROFILE ---");
+        User currentUser = SessionManager.getCurrentUser();
+
+        System.out.print("Enter New Full Name (or press Enter to keep current): ");
+        String name = scanner.nextLine();
+        if (!name.trim().isEmpty()) currentUser.setFullName(name);
+
+        System.out.print("Enter New Department: ");
+        String dept = scanner.nextLine();
+        if (!dept.trim().isEmpty()) currentUser.setDepartment(dept);
+
+        System.out.print("Enter New Semester (1-8): ");
+        String semInput = scanner.nextLine();
+        if (!semInput.trim().isEmpty()) {
+            int sem = Validator.safeParseInt(semInput);
+            if (Validator.isValidSemester(sem)) {
+                currentUser.setSemester(sem);
+            } else {
+                System.out.println("âŒ Invalid semester. Must be between 1 and 8. Skipping.");
+            }
+        }
+
+        System.out.print("Enter New Phone (10 digits): ");
+        String phone = scanner.nextLine();
+        if (!phone.trim().isEmpty()) {
+            if (Validator.isValidPhone(phone)) {
+                currentUser.setPhone(phone);
+            } else {
+                System.out.println("âŒ Invalid phone number. Skipping phone update.");
+            }
+        }
+
+        System.out.print("Enter New Bio: ");
+        String bio = scanner.nextLine();
+        if (!bio.trim().isEmpty()) currentUser.setBio(bio);
+
+        userService.updateUserProfile(currentUser);
+    }
+
+    /**
+     * Notification Panel using STACK Data Structure (LIFO)
+     * Latest activity shows on top - Like WhatsApp notifications
+     */
+    private void showNotificationPanel(int userId) {
+        Stack<ExchangeRequest> notificationStack = exchangeRequestService.getRequestNotificationsStack(userId);
+
+        if (notificationStack.isEmpty()) {
+            return; // No notifications - silent skip
+        }
+
+        System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+        System.out.println("â•‘        RECENT NOTIFICATIONS (LATEST FIRST)   â•‘");
+        System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+
+        int count = 0;
+        int maxShow = 5;
+
+        while (!notificationStack.isEmpty() && count < maxShow) {
+            ExchangeRequest req = notificationStack.pop(); // LIFO
+            String message = "";
+            String status = req.getStatus();
+
+            if (req.getSenderId() == userId) {
+                // I sent this request
+                if (status.equalsIgnoreCase("Pending")) {
+                    message = "You sent a request to User " + req.getReceiverId() + " (Pending)";
+                } else if (status.equalsIgnoreCase("Accepted")) {
+                    message = "User " + req.getReceiverId() + " ACCEPTED your request!";
+                } else if (status.equalsIgnoreCase("Rejected")) {
+                    message = "User " + req.getReceiverId() + " rejected your request";
+                } else if (status.equalsIgnoreCase("Cancelled")) {
+                    message = "You cancelled request to User " + req.getReceiverId();
+                }
+            } else {
+                // I received this request
+                if (status.equalsIgnoreCase("Pending")) {
+                    message = "User " + req.getSenderId() + " sent you a NEW request (Action Required!)";
+                } else if (status.equalsIgnoreCase("Accepted")) {
+                    message = "You accepted User " + req.getSenderId() + "'s request";
+                } else if (status.equalsIgnoreCase("Rejected")) {
+                    message = "You rejected User " + req.getSenderId() + "'s request";
+                }
+            }
+
+            System.out.println((count + 1) + ". " + message);
+            System.out.println("   Date: " + req.getRequestDate());
+            count++;
+        }
+
+        if (!notificationStack.isEmpty()) {
+            System.out.println("   ... and " + notificationStack.size() + " more (Check Exchange Requests menu)");
+        }
+        System.out.println("-----------------------------------------------\n");
+    }
+}
+
+
+========== FILE: ExchangeRequestMenu.java ==========
+
+package com.skillbridge.menu;
+
+import com.skillbridge.model.ExchangeRequest;
+import com.skillbridge.service.ExchangeRequestService;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+import java.util.List;
+import java.util.Scanner;
+
+public class ExchangeRequestMenu {
+
+    private Scanner scanner;
+    private ExchangeRequestService requestService;
+
+    public ExchangeRequestMenu() {
+        this.scanner = new Scanner(System.in);
+        this.requestService = new ExchangeRequestService();
+    }
+
+    public void showMenu() {
+        boolean running = true;
+
+        while (running) {
+            System.out.println("\n=================================");
+            System.out.println("   EXCHANGE REQUESTS");
+            System.out.println("=================================");
+            System.out.println("1. Send New Request");
+            System.out.println("2. View My Requests");
+            System.out.println("3. Accept Request");
+            System.out.println("4. Reject Request");
+            System.out.println("5. Cancel Request");
+            System.out.println("6. Back to Dashboard");
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1": handleSendRequest(); break;
+                case "2": handleViewRequests(); break;
+                case "3": handleAcceptRequest(); break;
+                case "4": handleRejectRequest(); break;
+                case "5": handleCancelRequest(); break;
+                case "6": running = false; break;
+                default: System.out.println("âŒ Invalid choice.");
+            }
+        }
+    }
+
+    private void handleSendRequest() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.println("\n--- SEND NEW REQUEST ---");
+
+        System.out.print("Enter Receiver's User ID: ");
+        int receiverId = Validator.safeParseInt(scanner.nextLine());
+        if (receiverId == -1) { System.out.println("Invalid Receiver ID."); return; }
+
+        System.out.print("Enter Requested Skill ID: ");
+        int skillId = Validator.safeParseInt(scanner.nextLine());
+        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
+
+        // Exchange Type Selection (Number-based)
+        System.out.println("\nSelect Exchange Type:");
+        System.out.println("  1. Direct (One-way learning - Credits deducted)");
+        System.out.println("  2. Swap (Two-way exchange - No credits deducted)");
+        System.out.print("Choose (1 or 2): ");
+        int typeChoice = Validator.safeParseInt(scanner.nextLine());
+
+        String type;
+        if (typeChoice == 1) {
+            type = "Direct";
+        } else if (typeChoice == 2) {
+            type = "Swap";
+        } else {
+            System.out.println("Invalid choice. Please select 1 or 2.");
+            return;
+        }
+
+        System.out.print("Enter Message: ");
+        String message = scanner.nextLine();
+
+        if (requestService.sendExchangeRequest(currentUserId, receiverId, skillId, type, message)) {
+            System.out.println("Request sent successfully!");
+        }
+    }
+
+    private void handleViewRequests() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.println("\n--- MY REQUESTS ---");
+
+        // QUEUE - Pending requests in FIFO order (First come first serve)
+        java.util.Queue<ExchangeRequest> pendingQueue = requestService.getPendingRequestsQueue(currentUserId);
+
+        if (!pendingQueue.isEmpty()) {
+            System.out.println("\n### PENDING REQUESTS (First Come First Serve) ###");
+            int priority = 1;
+            while (!pendingQueue.isEmpty()) {
+                ExchangeRequest req = pendingQueue.poll();
+                System.out.println("Priority " + priority + " | Request ID: " + req.getRequestId() +
+                        " | From User: " + req.getSenderId() +
+                        " | Skill ID: " + req.getRequestedSkillId() +
+                        " | Type: " + req.getExchangeType() +
+                        " | Received: " + req.getRequestDate());
+                priority++;
+            }
+            System.out.println("Accept in order for fairness!\n");
+        }
+
+        // Show request history (Accepted/Rejected/Cancelled)
+        List<ExchangeRequest> allRequests = requestService.getUserRequestHistory(currentUserId);
+        boolean hasHistory = false;
+
+        for (ExchangeRequest req : allRequests) {
+            if (!"Pending".equalsIgnoreCase(req.getStatus())) {
+                if (!hasHistory) {
+                    System.out.println("### REQUEST HISTORY ###");
+                    hasHistory = true;
+                }
+                System.out.println("Request ID: " + req.getRequestId() +
+                        " | Sender: " + req.getSenderId() +
+                        " | Receiver: " + req.getReceiverId() +
+                        " | Skill: " + req.getRequestedSkillId() +
+                        " | Type: " + req.getExchangeType() +
+                        " | Status: " + req.getStatus());
+            }
+        }
+
+        if (pendingQueue.isEmpty() && !hasHistory) {
+            System.out.println("No requests yet.");
+        }
+    }
+
+    private void handleAcceptRequest() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.print("\nEnter Request ID to Accept: ");
+        int requestId = Validator.safeParseInt(scanner.nextLine());
+        if (requestId == -1) { System.out.println("âŒ Invalid Request ID."); return; }
+
+        if (requestService.acceptExchangeRequest(requestId, currentUserId)) {
+            System.out.println("âœ… Request accepted!");
+        }
+    }
+
+    private void handleRejectRequest() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.print("\nEnter Request ID to Reject: ");
+        int requestId = Validator.safeParseInt(scanner.nextLine());
+        if (requestId == -1) { System.out.println("âŒ Invalid Request ID."); return; }
+
+        if (requestService.rejectExchangeRequest(requestId, currentUserId)) {
+            System.out.println("âœ… Request rejected!");
+        }
+    }
+
+    private void handleCancelRequest() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.print("\nEnter Request ID to Cancel: ");
+        int requestId = Validator.safeParseInt(scanner.nextLine());
+        if (requestId == -1) { System.out.println("âŒ Invalid Request ID."); return; }
+
+        if (requestService.cancelExchangeRequest(requestId, currentUserId)) {
+            System.out.println("âœ… Request cancelled!");
+        }
+    }
+}
+
+
+========== FILE: FeedbackMenu.java ==========
+
+package com.skillbridge.menu;
+
+import com.skillbridge.model.Feedback;
+import com.skillbridge.service.FeedbackService;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+import java.util.List;
+import java.util.Scanner;
+
+public class FeedbackMenu {
+
+    private Scanner scanner;
+    private FeedbackService feedbackService;
+
+    public FeedbackMenu() {
+        this.scanner = new Scanner(System.in);
+        this.feedbackService = new FeedbackService();
+    }
+
+    public void showMenu() {
+        boolean running = true;
+
+        while (running) {
+            System.out.println("\n=================================");
+            System.out.println("   FEEDBACK & RATINGS");
+            System.out.println("=================================");
+            System.out.println("1. Submit Feedback");
+            System.out.println("2. View All Feedback Received");
+            System.out.println("3. View Skill-wise Feedback");
+            System.out.println("4. Back to Dashboard");
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1": handleSubmitFeedback(); break;
+                case "2": handleViewFeedback(); break;
+                case "3": handleSkillWiseSummary(); break;
+                case "4": running = false; break;
+                default: System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private void handleSubmitFeedback() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.println("\n--- SUBMIT FEEDBACK ---");
+
+        System.out.print("Enter Session ID: ");
+        int sessionId = Validator.safeParseInt(scanner.nextLine());
+        if (sessionId == -1) { System.out.println("Invalid Session ID."); return; }
+
+        System.out.print("Enter Reviewed User's ID: ");
+        int reviewedId = Validator.safeParseInt(scanner.nextLine());
+        if (reviewedId == -1) { System.out.println("Invalid User ID."); return; }
+
+        System.out.print("Enter Rating (1-5): ");
+        int rating = Validator.safeParseInt(scanner.nextLine());
+        if (!Validator.isValidRating(rating)) { System.out.println("Rating must be 1-5."); return; }
+
+        System.out.print("Enter Comment: ");
+        String comment = scanner.nextLine();
+
+        if (feedbackService.leaveFeedback(sessionId, currentUserId, reviewedId, rating, comment)) {
+            System.out.println("Feedback submitted!");
+        }
+    }
+
+    private void handleViewFeedback() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.println("\n--- FEEDBACK RECEIVED ---");
+        List<Feedback> feedbackList = feedbackService.getFeedbackForUser(currentUserId);
+
+        if (feedbackList != null && !feedbackList.isEmpty()) {
+            int count = 1;
+            for (Feedback fb : feedbackList) {
+                String comment = (fb.getComment() != null && !fb.getComment().trim().isEmpty())
+                        ? fb.getComment() : "No comment provided";
+
+                System.out.println("\n--- Feedback " + count + " ---");
+                System.out.println("Session ID  : " + fb.getSessionId());
+                System.out.println("Rating      : " + fb.getRating() + "/5");
+                System.out.println("Comment     : " + comment);
+                System.out.println("Date        : " + fb.getFeedbackDate());
+                count++;
+            }
+        }
+    }
+
+    private void handleSkillWiseSummary() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.println("\n--- SKILL-WISE FEEDBACK SUMMARY ---");
+        List<String> summary = feedbackService.getSkillWiseFeedbackSummary(currentUserId);
+
+        if (summary == null || summary.isEmpty()) {
+            System.out.println("No skill-wise feedback yet.");
+        } else {
+            for (String line : summary) {
+                System.out.println(line);
+            }
+        }
+    }
+}
+
+
+========== FILE: MainMenu.java ==========
+
+package com.skillbridge.menu;
+
+import com.skillbridge.model.User;
+import com.skillbridge.service.AuthenticationService;
+import com.skillbridge.util.Validator;
+
+import java.util.Scanner;
+
+public class MainMenu {
+
+    private Scanner scanner;
+    private AuthenticationService authService;
+    private DashboardMenu dashboardMenu;
+    private ManagerMenu managerMenu;
+
+    public MainMenu() {
+        this.scanner = new Scanner(System.in);
+        this.authService = new AuthenticationService();
+        this.dashboardMenu = new DashboardMenu();
+        this.managerMenu = new ManagerMenu();
+    }
+
+    public void start() {
+        boolean running = true;
+
+        while (running) {
+            System.out.println("\n=================================");
+            System.out.println("   WELCOME TO SKILLBRIDGE");
+            System.out.println("=================================");
+            System.out.println("1. Login (Student)");
+            System.out.println("2. Register (Student)");
+            System.out.println("3. Manager Portal");
+            System.out.println("4. Exit Application");
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1":
+                    handleLogin();
+                    break;
+                case "2":
+                    handleRegister();
+                    break;
+                case "3":
+                    managerMenu.start();
+                    break;
+                case "4":
+                    System.out.println("==========================================");
+                    System.out.println(" Thank you for using SkillBridge. Goodbye!");
+                    System.out.println("==========================================");
+                    running = false;
+                    break;
+                default:
+                    System.out.println("Invalid choice. Please type 1, 2, 3, or 4.");
+            }
+        }
+    }
+
+    private void handleLogin() {
+        System.out.println("\n--- STUDENT LOGIN ---");
+        System.out.print("Enter Email: ");
+        String email = scanner.nextLine();
+
+        System.out.print("Enter Password: ");
+        String password = scanner.nextLine();
+
+        boolean isSuccess = authService.login(email, password);
+
+        if (isSuccess) {
+            dashboardMenu.showDashboard();
+        }
+    }
+
+    private void handleRegister() {
+        System.out.println("\n--- REGISTER NEW STUDENT ACCOUNT ---");
+
+        System.out.print("Enter Full Name: ");
+        String name = scanner.nextLine();
+
+        System.out.print("Enter Enrollment Number: ");
+        String enrollmentNo = scanner.nextLine();
+
+        System.out.print("Enter Department (e.g., Computer Science): ");
+        String dept = scanner.nextLine();
+
+        System.out.print("Enter Semester (1-8): ");
+        int semester = Validator.safeParseInt(scanner.nextLine());
+        if (!Validator.isValidSemester(semester)) {
+            System.out.println("Invalid semester. Must be between 1 and 8.");
+            return;
+        }
+
+        System.out.print("Enter Email: ");
+        String email = scanner.nextLine();
+
+        System.out.print("Enter Password (min 6 characters): ");
+        String password = scanner.nextLine();
+
+        System.out.print("Enter Phone Number (10 digits): ");
+        String phone = scanner.nextLine();
+
+        System.out.print("Write a short Bio about yourself: ");
+        String bio = scanner.nextLine();
+
+        User newUser = new User(name, enrollmentNo, dept, semester, email, password, phone, bio);
+
+        boolean isSuccess = authService.register(newUser);
+
+        if (isSuccess) {
+            System.out.println("\nRegistration successful! You start with 50 credits.");
+        } else {
+            System.out.println("Registration failed. Please try again.");
+        }
+    }
+}
+
+
+========== FILE: ManagerMenu.java ==========
+
+package com.skillbridge.menu;
+
+import com.skillbridge.model.*;
+import com.skillbridge.service.LeaderboardService;
+import com.skillbridge.service.ManagerService;
+
+import java.util.List;
+import java.util.Scanner;
+
+public class ManagerMenu {
+
+    private Scanner scanner;
+    private ManagerService managerService;
+    private LeaderboardService leaderboardService;
+
+    public ManagerMenu() {
+        this.scanner = new Scanner(System.in);
+        this.managerService = new ManagerService();
+        this.leaderboardService = new LeaderboardService();
+    }
+
+    public void start() {
+        System.out.println("\n=================================");
+        System.out.println("   MANAGER PORTAL LOGIN");
+        System.out.println("=================================");
+
+        System.out.print("Enter Username: ");
+        String username = scanner.nextLine();
+
+        System.out.print("Enter Password: ");
+        String password = scanner.nextLine();
+
+        Manager manager = managerService.loginManager(username, password);
+
+        if (manager == null) {
+            System.out.println("\nManager login failed. Returning to main menu.\n");
+            return;
+        }
+
+        showManagerDashboard(manager);
+    }
+
+    private void showManagerDashboard(Manager manager) {
+        boolean loggedIn = true;
+
+        while (loggedIn) {
+            System.out.println("\n=====================================");
+            System.out.println("   MANAGER DASHBOARD - " + manager.getFullName().toUpperCase());
+            System.out.println("=====================================");
+            System.out.println("1. View All Students");
+            System.out.println("2. View All Skills");
+            System.out.println("3. View All Exchange Requests");
+            System.out.println("4. View All Sessions");
+            System.out.println("5. View All Feedback");
+            System.out.println("6. View Leaderboard");
+            System.out.println("7. Logout");
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1": viewAllStudents(); break;
+                case "2": viewAllSkills(); break;
+                case "3": viewAllRequests(); break;
+                case "4": viewAllSessions(); break;
+                case "5": viewAllFeedback(); break;
+                case "6": leaderboardService.displayLeaderboard(); break;
+                case "7":
+                    System.out.println("Manager logged out.");
+                    loggedIn = false;
+                    break;
+                default:
+                    System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private void viewAllStudents() {
+        System.out.println("\n--- ALL STUDENTS ---");
+        List<User> users = managerService.getAllUsers();
+
+        if (users == null || users.isEmpty()) {
+            System.out.println("No students found.");
+            return;
+        }
+
+        System.out.println("Total Students: " + users.size());
+        System.out.println("-------------------------------------");
+
+        for (User u : users) {
+            System.out.println("ID: " + u.getUserId() +
+                    " | Name: " + u.getFullName() +
+                    " | Enrollment: " + u.getEnrollmentNo() +
+                    " | Dept: " + u.getDepartment() +
+                    " | Sem: " + u.getSemester() +
+                    " | Credits: " + u.getCredits() +
+                    " | Active: " + (u.isActive() ? "Yes" : "No"));
+        }
+    }
+
+    private void viewAllSkills() {
+        System.out.println("\n--- ALL SKILLS ---");
+        List<Skill> skills = managerService.getAllSkills();
+
+        if (skills == null || skills.isEmpty()) {
+            System.out.println("No skills found.");
+            return;
+        }
+
+        System.out.println("Total Skills: " + skills.size());
+        System.out.println("-------------------------------------");
+
+        for (Skill s : skills) {
+            System.out.println("ID: " + s.getSkillId() +
+                    " | Name: " + s.getSkillName() +
+                    " | Category: " + s.getCategory() +
+                    " | Description: " + s.getDescription());
+        }
+    }
+
+    private void viewAllRequests() {
+        System.out.println("\n--- ALL EXCHANGE REQUESTS ---");
+        List<ExchangeRequest> requests = managerService.getAllRequests();
+
+        if (requests == null || requests.isEmpty()) {
+            System.out.println("No requests found.");
+            return;
+        }
+
+        System.out.println("Total Requests: " + requests.size());
+        System.out.println("-------------------------------------");
+
+        for (ExchangeRequest r : requests) {
+            System.out.println("Req ID: " + r.getRequestId() +
+                    " | Sender: " + r.getSenderId() +
+                    " | Receiver: " + r.getReceiverId() +
+                    " | Skill ID: " + r.getRequestedSkillId() +
+                    " | Type: " + r.getExchangeType() +
+                    " | Status: " + r.getStatus() +
+                    " | Date: " + r.getRequestDate());
+        }
+    }
+
+    private void viewAllSessions() {
+        System.out.println("\n--- ALL LEARNING SESSIONS ---");
+        List<LearningSession> sessions = managerService.getAllSessions();
+
+        if (sessions == null || sessions.isEmpty()) {
+            System.out.println("No sessions found.");
+            return;
+        }
+
+        System.out.println("Total Sessions: " + sessions.size());
+        System.out.println("-------------------------------------");
+
+        for (LearningSession s : sessions) {
+            System.out.println("Session ID: " + s.getSessionId() +
+                    " | Teacher: " + s.getTeacherId() +
+                    " | Learner: " + s.getLearnerId() +
+                    " | Skill: " + s.getSkillId() +
+                    " | Date: " + s.getSessionDate() +
+                    " | Time: " + s.getStartTime() + "-" + s.getEndTime() +
+                    " | Mode: " + s.getMode() +
+                    " | Status: " + s.getStatus());
+        }
+    }
+
+    private void viewAllFeedback() {
+        System.out.println("\n--- ALL FEEDBACK ---");
+        List<Feedback> feedbackList = managerService.getAllFeedback();
+
+        if (feedbackList == null || feedbackList.isEmpty()) {
+            System.out.println("No feedback found.");
+            return;
+        }
+
+        System.out.println("Total Feedback: " + feedbackList.size());
+        System.out.println("-------------------------------------");
+
+        for (Feedback f : feedbackList) {
+            System.out.println("Feedback ID: " + f.getFeedbackId() +
+                    " | Session: " + f.getSessionId() +
+                    " | Reviewer: " + f.getReviewerId() +
+                    " | Reviewed: " + f.getReviewedUserId() +
+                    " | Rating: " + f.getRating() + "/5" +
+                    " | Comment: " + f.getComment() +
+                    " | Date: " + f.getFeedbackDate());
+        }
+    }
+}
+
+
+========== FILE: SessionMenu.java ==========
+
+package com.skillbridge.menu;
+
+import com.skillbridge.model.LearningSession;
+import com.skillbridge.service.LearningSessionService;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
+import java.util.Scanner;
+
+public class SessionMenu {
+
+    private Scanner scanner;
+    private LearningSessionService sessionService;
+
+    public SessionMenu() {
+        this.scanner = new Scanner(System.in);
+        this.sessionService = new LearningSessionService();
+    }
+
+    public void showMenu() {
+        boolean running = true;
+
+        while (running) {
+            System.out.println("\n=================================");
+            System.out.println("   LEARNING SESSIONS");
+            System.out.println("=================================");
+            System.out.println("1. Schedule New Session");
+            System.out.println("2. View Session History");
+            System.out.println("3. Mark Session as Completed");
+            System.out.println("4. Cancel a Session");
+            System.out.println("5. Back to Dashboard");
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1": handleScheduleSession(); break;
+                case "2": handleViewSessionHistory(); break;
+                case "3": handleCompleteSession(); break;
+                case "4": handleCancelSession(); break;
+                case "5": running = false; break;
+                default: System.out.println("âŒ Invalid choice.");
+            }
+        }
+    }
+
+    private void handleScheduleSession() {
+        System.out.println("\n--- SCHEDULE SESSION ---");
+
+        System.out.print("Enter Exchange Request ID: ");
+        int requestId = Validator.safeParseInt(scanner.nextLine());
+        if (requestId == -1) { System.out.println("Invalid Request ID."); return; }
+
+        System.out.print("Enter Partner's User ID: ");
+        int partnerId = Validator.safeParseInt(scanner.nextLine());
+        if (partnerId == -1) { System.out.println("Invalid Partner ID."); return; }
+
+        System.out.print("Enter Skill ID: ");
+        int skillId = Validator.safeParseInt(scanner.nextLine());
+        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
+
+        System.out.print("Enter Date (YYYY-MM-DD): ");
+        LocalDate date = Validator.safeParseDate(scanner.nextLine());
+        if (date == null) { System.out.println("Invalid date. Use YYYY-MM-DD format."); return; }
+
+        System.out.print("Enter Start Time (HH:MM): ");
+        LocalTime startTime = Validator.safeParseTime(scanner.nextLine());
+        if (startTime == null) { System.out.println("Invalid time. Use HH:MM 24-hour format."); return; }
+
+        System.out.print("Enter End Time (HH:MM): ");
+        LocalTime endTime = Validator.safeParseTime(scanner.nextLine());
+        if (endTime == null) { System.out.println("Invalid time. Use HH:MM 24-hour format."); return; }
+
+        // Mode Selection (Number-based)
+        System.out.println("\nSelect Mode:");
+        System.out.println("  1. Online");
+        System.out.println("  2. Offline");
+        System.out.print("Choose (1 or 2): ");
+        int modeChoice = Validator.safeParseInt(scanner.nextLine());
+
+        String mode;
+        if (modeChoice == 1) {
+            mode = "Online";
+        } else if (modeChoice == 2) {
+            mode = "Offline";
+        } else {
+            System.out.println("Invalid choice. Please select 1 or 2.");
+            return;
+        }
+
+        String link = "";
+        String location = "";
+
+        if (modeChoice == 1) {
+            // Online - Ask for meeting link only
+            System.out.print("Enter Meeting Link: ");
+            link = scanner.nextLine();
+        } else {
+            // Offline - Ask for location only
+            System.out.print("Enter Location: ");
+            location = scanner.nextLine();
+        }
+
+        int myId = SessionManager.getCurrentUser().getUserId();
+        LearningSession session = new LearningSession(requestId, myId, partnerId, skillId, date, startTime, endTime, mode, link, location);
+
+        if (sessionService.scheduleSession(session)) {
+            System.out.println("Session scheduled successfully!");
+        }
+    }
+
+    private void handleViewSessionHistory() {
+        System.out.println("\n--- MY SESSION HISTORY ---");
+        int myId = SessionManager.getCurrentUser().getUserId();
+        List<LearningSession> sessions = sessionService.getUserSessionHistory(myId);
+
+        if (sessions == null || sessions.isEmpty()) {
+            System.out.println("â„¹ï¸ No sessions yet.");
+        } else {
+            int count = 1;
+            for (LearningSession session : sessions) {
+                System.out.println("\n--- Session " + count + " ---");
+                System.out.println("Session ID  : " + session.getSessionId());
+                System.out.println("Date        : " + session.getSessionDate());
+                System.out.println("Time        : " + session.getStartTime() + " to " + session.getEndTime());
+                System.out.println("Mode        : " + session.getMode());
+                System.out.println("Status      : " + session.getStatus());
+                if (session.getMode().equalsIgnoreCase("Online")) {
+                    System.out.println("Meeting Link: " + session.getMeetingLink());
+                } else {
+                    System.out.println("Location    : " + session.getLocation());
+                }
+                count++;
+            }
+        }
+    }
+
+    private void handleCompleteSession() {
+        System.out.println("\n--- COMPLETE SESSION ---");
+        System.out.print("Enter Session ID: ");
+        int sessionId = Validator.safeParseInt(scanner.nextLine());
+        if (sessionId == -1) { System.out.println("âŒ Invalid Session ID."); return; }
+
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        if (sessionService.completeSession(sessionId, currentUserId)) {
+            System.out.println("âœ… Session marked completed!");
+        }
+    }
+
+    private void handleCancelSession() {
+        System.out.println("\n--- CANCEL SESSION ---");
+        System.out.print("Enter Session ID: ");
+        int sessionId = Validator.safeParseInt(scanner.nextLine());
+        if (sessionId == -1) { System.out.println("âŒ Invalid Session ID."); return; }
+
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        if (sessionService.cancelSession(sessionId, currentUserId)) {
+            System.out.println("âœ… Session cancelled!");
+        }
+    }
+}
+
+
+========== FILE: SkillMenu.java ==========
+
+package com.skillbridge.menu;
+
+import com.skillbridge.model.Skill;
+import com.skillbridge.model.User;
+import com.skillbridge.service.RecommendationService;
+import com.skillbridge.service.SearchService;
+import com.skillbridge.service.SkillService;
+import com.skillbridge.service.UserSkillService;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+import java.util.List;
+import java.util.Scanner;
+
+public class SkillMenu {
+
+    private Scanner scanner;
+    private SkillService skillService;
+    private UserSkillService userSkillService;
+    private SearchService searchService;
+    private RecommendationService recommendationService;
+
+    public SkillMenu() {
+        this.scanner = new Scanner(System.in);
+        this.skillService = new SkillService();
+        this.userSkillService = new UserSkillService();
+        this.searchService = new SearchService();
+        this.recommendationService = new RecommendationService();
+    }
+
+    public void showMenu() {
+        boolean running = true;
+
+        while (running) {
+            System.out.println("\n=================================");
+            System.out.println("   SKILL MANAGEMENT & SEARCH");
+            System.out.println("=================================");
+            System.out.println("1. View All Skills");
+            System.out.println("2. Create New Skill");
+            System.out.println("3. Add Skill to Profile");
+            System.out.println("4. Search by Department");
+            System.out.println("5. Search by Semester");
+            System.out.println("6. Get Smart Recommendations");
+            System.out.println("7. Back to Dashboard");
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1": handleViewAllSkills(); break;
+                case "2": handleCreateNewSkill(); break;
+                case "3": handleAddSkillToProfile(); break;
+                case "4": handleSearchByDepartment(); break;
+                case "5": handleSearchBySemester(); break;
+                case "6": handleGetRecommendations(); break;
+                case "7": running = false; break;
+                default: System.out.println("âŒ Invalid choice.");
+            }
+        }
+    }
+
+    private void handleViewAllSkills() {
+        System.out.println("\n--- ALL PLATFORM SKILLS ---");
+        List<Skill> skills = skillService.getAllSkills();
+        if (skills != null && !skills.isEmpty()) {
+            for (Skill skill : skills) {
+                System.out.println("ID: " + skill.getSkillId() + " | Name: " + skill.getSkillName() + " | Category: " + skill.getCategory());
+            }
+        }
+    }
+
+    private void handleCreateNewSkill() {
+        System.out.println("\n--- CREATE A NEW SKILL ---");
+        System.out.print("Enter Skill Name: ");
+        String name = scanner.nextLine();
+
+        System.out.print("Enter Category: ");
+        String category = scanner.nextLine();
+
+        System.out.print("Enter Description: ");
+        String desc = scanner.nextLine();
+
+        Skill newSkill = new Skill();
+        newSkill.setSkillName(name);
+        newSkill.setCategory(category);
+        newSkill.setDescription(desc);
+
+        skillService.addNewSkill(newSkill);
+    }
+
+    private void handleAddSkillToProfile() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.println("\n--- ADD SKILL TO PROFILE ---");
+
+        System.out.print("Enter Skill ID: ");
+        int skillId = Validator.safeParseInt(scanner.nextLine());
+        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
+
+        // Skill Type Selection (Number-based)
+        System.out.println("\nSelect Skill Type:");
+        System.out.println("  1. Teaching");
+        System.out.println("  2. Learning");
+        System.out.print("Choose (1 or 2): ");
+        int typeChoice = Validator.safeParseInt(scanner.nextLine());
+
+        String type;
+        if (typeChoice == 1) {
+            type = "Teaching";
+        } else if (typeChoice == 2) {
+            type = "Learning";
+        } else {
+            System.out.println("Invalid choice. Please select 1 or 2.");
+            return;
+        }
+
+        // Skill Level Selection (Number-based)
+        System.out.println("\nSelect Skill Level:");
+        System.out.println("  1. Beginner");
+        System.out.println("  2. Intermediate");
+        System.out.println("  3. Advanced");
+        System.out.print("Choose (1, 2, or 3): ");
+        int levelChoice = Validator.safeParseInt(scanner.nextLine());
+
+        String level;
+        if (levelChoice == 1) {
+            level = "Beginner";
+        } else if (levelChoice == 2) {
+            level = "Intermediate";
+        } else if (levelChoice == 3) {
+            level = "Advanced";
+        } else {
+            System.out.println("Invalid choice. Please select 1, 2, or 3.");
+            return;
+        }
+
+        if (userSkillService.addSkillToUser(currentUserId, skillId, type, level)) {
+            System.out.println("Skill added to your profile!");
+        }
+    }
+
+    private void handleSearchByDepartment() {
+        System.out.println("\n--- SEARCH BY DEPARTMENT ---");
+        System.out.print("Enter Skill ID: ");
+        int skillId = Validator.safeParseInt(scanner.nextLine());
+        if (skillId == -1) { System.out.println("âŒ Invalid Skill ID."); return; }
+
+        System.out.print("Enter Department: ");
+        String dept = scanner.nextLine();
+
+        List<User> results = searchService.searchStudentsByDepartment(dept, skillId);
+        printSearchResults(results);
+    }
+
+    private void handleSearchBySemester() {
+        System.out.println("\n--- SEARCH BY SEMESTER ---");
+        System.out.print("Enter Skill ID: ");
+        int skillId = Validator.safeParseInt(scanner.nextLine());
+        if (skillId == -1) { System.out.println("âŒ Invalid Skill ID."); return; }
+
+        System.out.print("Enter Semester (1-8): ");
+        int sem = Validator.safeParseInt(scanner.nextLine());
+        if (!Validator.isValidSemester(sem)) {
+            System.out.println("âŒ Invalid Semester. Must be between 1 and 8.");
+            return;
+        }
+
+        List<User> results = searchService.searchStudentsBySemester(sem, skillId);
+        printSearchResults(results);
+    }
+
+    private void handleGetRecommendations() {
+        int currentUserId = SessionManager.getCurrentUser().getUserId();
+        System.out.println("\n--- SMART RECOMMENDATIONS ---");
+        System.out.print("Enter Skill ID: ");
+        int skillId = Validator.safeParseInt(scanner.nextLine());
+        if (skillId == -1) { System.out.println("âŒ Invalid Skill ID."); return; }
+
+        List<User> recommendations = recommendationService.getRecommendedTeachers(currentUserId, skillId);
+        if (recommendations != null && !recommendations.isEmpty()) {
+            System.out.println("\n--- TOP MATCHES ---");
+            for (User teacher : recommendations) {
+                System.out.println("User ID: " + teacher.getUserId() + " | " + teacher.getFullName() + " | " + teacher.getDepartment() + " | Sem: " + teacher.getSemester());
+            }
+        }
+    }
+
+    private void printSearchResults(List<User> results) {
+        if (results == null || results.isEmpty()) {
+            System.out.println("â„¹ï¸ No teachers found.");
+        } else {
+            for (User teacher : results) {
+                System.out.println("User ID: " + teacher.getUserId() + " | " + teacher.getFullName() + " | " + teacher.getDepartment() + " | Sem: " + teacher.getSemester());
+            }
+        }
+    }
+}
+
+
+========== FILE: ExchangeRequest.java ==========
+
+package com.skillbridge.model;
+
+import java.sql.Timestamp;
+
+public class ExchangeRequest {
+    private int requestId;
+    private int senderId;
+    private int receiverId;
+    private int requestedSkillId;
+    private String exchangeType; // e.g., "Direct", "Swap"
+    private String message;
+    private String status; // Pending, Accepted, Rejected, Cancelled
+    private Timestamp requestDate;
+
+    public ExchangeRequest() {}
+
+    public ExchangeRequest(int requestId, int senderId, int receiverId, int requestedSkillId,
+                           String exchangeType, String message, String status, Timestamp requestDate) {
+        this.requestId = requestId;
+        this.senderId = senderId;
+        this.receiverId = receiverId;
+        this.requestedSkillId = requestedSkillId;
+        this.exchangeType = exchangeType;
+        this.message = message;
+        this.status = status;
+        this.requestDate = requestDate;
+    }
+
+    public int getRequestId() { return requestId; }
+    public void setRequestId(int requestId) { this.requestId = requestId; }
+
+    public int getSenderId() { return senderId; }
+    public void setSenderId(int senderId) { this.senderId = senderId; }
+
+    public int getReceiverId() { return receiverId; }
+    public void setReceiverId(int receiverId) { this.receiverId = receiverId; }
+
+    public int getRequestedSkillId() { return requestedSkillId; }
+    public void setRequestedSkillId(int requestedSkillId) { this.requestedSkillId = requestedSkillId; }
+
+    public String getExchangeType() { return exchangeType; }
+    public void setExchangeType(String exchangeType) { this.exchangeType = exchangeType; }
+
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public Timestamp getRequestDate() { return requestDate; }
+    public void setRequestDate(Timestamp requestDate) { this.requestDate = requestDate; }
+}
+
+
+========== FILE: Feedback.java ==========
+
+package com.skillbridge.model;
+
+import java.sql.Timestamp;
+
+public class Feedback {
+    private int feedbackId;
+    private int sessionId;
+    private int reviewerId;
+    private int reviewedUserId;
+    private int rating; // 1 to 5
+    private String comment;
+    private Timestamp feedbackDate;
+
+    public Feedback() {}
+
+    public Feedback(int feedbackId, int sessionId, int reviewerId, int reviewedUserId,
+                    int rating, String comment, Timestamp feedbackDate) {
+        this.feedbackId = feedbackId;
+        this.sessionId = sessionId;
+        this.reviewerId = reviewerId;
+        this.reviewedUserId = reviewedUserId;
+        this.rating = rating;
+        this.comment = comment;
+        this.feedbackDate = feedbackDate;
+    }
+
+    public int getFeedbackId() { return feedbackId; }
+    public void setFeedbackId(int feedbackId) { this.feedbackId = feedbackId; }
+
+    public int getSessionId() { return sessionId; }
+    public void setSessionId(int sessionId) { this.sessionId = sessionId; }
+
+    public int getReviewerId() { return reviewerId; }
+    public void setReviewerId(int reviewerId) { this.reviewerId = reviewerId; }
+
+    public int getReviewedUserId() { return reviewedUserId; }
+    public void setReviewedUserId(int reviewedUserId) { this.reviewedUserId = reviewedUserId; }
+
+    public int getRating() { return rating; }
+    public void setRating(int rating) { this.rating = rating; }
+
+    public String getComment() { return comment; }
+    public void setComment(String comment) { this.comment = comment; }
+
+    public Timestamp getFeedbackDate() { return feedbackDate; }
+    public void setFeedbackDate(Timestamp feedbackDate) { this.feedbackDate = feedbackDate; }
+}
+
+
+========== FILE: LeaderboardEntry.java ==========
+
+package com.skillbridge.model;
+
+public class LeaderboardEntry {
+    private int rank;
+    private int userId;
+    private String name;
+    private String department;
+    private int semester;
+    private int credits;
+    private int teachingSessions;
+    private int learningSessions;
+    private int completedSessions;
+    private double averageRating;
+    private boolean isActive;
+
+    public LeaderboardEntry() {}
+
+    public LeaderboardEntry(int rank, int userId, String name, String department, int semester,
+                            int credits, int teachingSessions, int learningSessions,
+                            int completedSessions, double averageRating, boolean isActive) {
+        this.rank = rank;
+        this.userId = userId;
+        this.name = name;
+        this.department = department;
+        this.semester = semester;
+        this.credits = credits;
+        this.teachingSessions = teachingSessions;
+        this.learningSessions = learningSessions;
+        this.completedSessions = completedSessions;
+        this.averageRating = averageRating;
+        this.isActive = isActive;
+    }
+
+    public int getRank() { return rank; }
+    public void setRank(int rank) { this.rank = rank; }
+
+    public int getUserId() { return userId; }
+    public void setUserId(int userId) { this.userId = userId; }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public String getDepartment() { return department; }
+    public void setDepartment(String department) { this.department = department; }
+
+    public int getSemester() { return semester; }
+    public void setSemester(int semester) { this.semester = semester; }
+
+    public int getCredits() { return credits; }
+    public void setCredits(int credits) { this.credits = credits; }
+
+    public int getTeachingSessions() { return teachingSessions; }
+    public void setTeachingSessions(int teachingSessions) { this.teachingSessions = teachingSessions; }
+
+    public int getLearningSessions() { return learningSessions; }
+    public void setLearningSessions(int learningSessions) { this.learningSessions = learningSessions; }
+
+    public int getCompletedSessions() { return completedSessions; }
+    public void setCompletedSessions(int completedSessions) { this.completedSessions = completedSessions; }
+
+    public double getAverageRating() { return averageRating; }
+    public void setAverageRating(double averageRating) { this.averageRating = averageRating; }
+
+    public boolean isActive() { return isActive; }
+    public void setActive(boolean active) { isActive = active; }
+
+    public String toFormattedString() {
+        return String.format(
+                "Rank: %d | %s | Dept: %s | Sem: %d | Credits: %d | Teaching: %d | Learning: %d | Completed: %d | Avg Rating: %.2f | Active: %s",
+                rank, name, department, semester, credits, teachingSessions, learningSessions,
+                completedSessions, averageRating, (isActive ? "Yes" : "No")
+        );
+    }
+}
+
+
+========== FILE: LearningSession.java ==========
+
+package com.skillbridge.model;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+
+public class LearningSession {
+
+    private int sessionId;
+    private int requestId;
+    private int teacherId;
+    private int learnerId;
+    private int skillId;
+    private LocalDate sessionDate;
+    private LocalTime startTime;
+    private LocalTime endTime;
+    private String mode;
+    private String meetingLink;
+    private String location;
+    private String status;
+    private LocalDateTime completedAt;
+
+    // 1. No-argument constructor
+    public LearningSession() {
+    }
+
+    // 2. Constructor for Scheduling a new session (excluding auto-generated/default fields)
+    public LearningSession(int requestId, int teacherId, int learnerId, int skillId,
+                           LocalDate sessionDate, LocalTime startTime, LocalTime endTime,
+                           String mode, String meetingLink, String location) {
+        this.requestId = requestId;
+        this.teacherId = teacherId;
+        this.learnerId = learnerId;
+        this.skillId = skillId;
+        this.sessionDate = sessionDate;
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.mode = mode;
+        this.meetingLink = meetingLink;
+        this.location = location;
+        // Status defaults to 'Scheduled' in DB/Service, completedAt is null initially
+    }
+
+    // 3. All-arguments constructor (used when fetching from Database)
+    public LearningSession(int sessionId, int requestId, int teacherId, int learnerId,
+                           int skillId, LocalDate sessionDate, LocalTime startTime,
+                           LocalTime endTime, String mode, String meetingLink,
+                           String location, String status, LocalDateTime completedAt) {
+        this.sessionId = sessionId;
+        this.requestId = requestId;
+        this.teacherId = teacherId;
+        this.learnerId = learnerId;
+        this.skillId = skillId;
+        this.sessionDate = sessionDate;
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.mode = mode;
+        this.meetingLink = meetingLink;
+        this.location = location;
+        this.status = status;
+        this.completedAt = completedAt;
+    }
+
+    // Getters and Setters
+    public int getSessionId() { return sessionId; }
+    public void setSessionId(int sessionId) { this.sessionId = sessionId; }
+
+    public int getRequestId() { return requestId; }
+    public void setRequestId(int requestId) { this.requestId = requestId; }
+
+    public int getTeacherId() { return teacherId; }
+    public void setTeacherId(int teacherId) { this.teacherId = teacherId; }
+
+    public int getLearnerId() { return learnerId; }
+    public void setLearnerId(int learnerId) { this.learnerId = learnerId; }
+
+    public int getSkillId() { return skillId; }
+    public void setSkillId(int skillId) { this.skillId = skillId; }
+
+    public LocalDate getSessionDate() { return sessionDate; }
+    public void setSessionDate(LocalDate sessionDate) { this.sessionDate = sessionDate; }
+
+    public LocalTime getStartTime() { return startTime; }
+    public void setStartTime(LocalTime startTime) { this.startTime = startTime; }
+
+    public LocalTime getEndTime() { return endTime; }
+    public void setEndTime(LocalTime endTime) { this.endTime = endTime; }
+
+    public String getMode() { return mode; }
+    public void setMode(String mode) { this.mode = mode; }
+
+    public String getMeetingLink() { return meetingLink; }
+    public void setMeetingLink(String meetingLink) { this.meetingLink = meetingLink; }
+
+    public String getLocation() { return location; }
+    public void setLocation(String location) { this.location = location; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public LocalDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+
+    @Override
+    public String toString() {
+        return "LearningSession [" +
+                "Session ID=" + sessionId +
+                ", Date=" + sessionDate +
+                ", Time=" + startTime + " to " + endTime +
+                ", Mode='" + mode + '\'' +
+                ", Status='" + status + '\'' +
+                ']';
+    }
+}
+
+
+========== FILE: Manager.java ==========
+
+package com.skillbridge.model;
+
+import java.time.LocalDateTime;
+
+public class Manager {
+    private int managerId;
+    private String username;
+    private String passwordHash;
+    private String fullName;
+    private String email;
+    private LocalDateTime createdAt;
+
+    public Manager() {}
+
+    public Manager(int managerId, String username, String passwordHash, String fullName, String email, LocalDateTime createdAt) {
+        this.managerId = managerId;
+        this.username = username;
+        this.passwordHash = passwordHash;
+        this.fullName = fullName;
+        this.email = email;
+        this.createdAt = createdAt;
+    }
+
+    public int getManagerId() { return managerId; }
+    public void setManagerId(int managerId) { this.managerId = managerId; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+
+    public String getFullName() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+}
+
+
+========== FILE: Skill.java ==========
+
+package com.skillbridge.model;
+
+public class Skill {
+
+    private int skillId;
+    private String skillName;
+    private String category;
+    private String description;
+
+    // Default Constructor
+    public Skill() {
+    }
+
+    // Parameterized Constructor
+    public Skill(int skillId, String skillName, String category, String description) {
+        this.skillId = skillId;
+        this.skillName = skillName;
+        this.category = category;
+        this.description = description;
+    }
+
+    // Constructor without ID (useful for inserting new records where DB auto-increments ID)
+    public Skill(String skillName, String category, String description) {
+        this.skillName = skillName;
+        this.category = category;
+        this.description = description;
+    }
+
+    // Getters and Setters
+    public int getSkillId() {
+        return skillId;
+    }
+
+    public void setSkillId(int skillId) {
+        this.skillId = skillId;
+    }
+
+    public String getSkillName() {
+        return skillName;
+    }
+
+    public void setSkillName(String skillName) {
+        this.skillName = skillName;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    @Override
+    public String toString() {
+        return "Skill{" +
+                "skillId=" + skillId +
+                ", skillName='" + skillName + '\'' +
+                ", category='" + category + '\'' +
+                ", description='" + description + '\'' +
+                '}';
+    }
+}
+
+
+========== FILE: User.java ==========
+
+package com.skillbridge.model;
+
+import java.time.LocalDateTime;
+
+public class User {
+
+    private int userId;
+    private String fullName;
+    private String enrollmentNo;
+    private String department;
+    private int semester;
+    private String email;
+    private String passwordHash;
+    private String phone;
+    private String bio;
+    private boolean isActive;
+    private LocalDateTime createdAt;
+    private int credits; // NEW: Credit economy system
+
+    // 1. No-argument constructor
+    public User() {
+    }
+
+    // 2. Constructor for Registration (excluding auto-generated DB fields)
+    public User(String fullName, String enrollmentNo, String department, int semester,
+                String email, String passwordHash, String phone, String bio) {
+        this.fullName = fullName;
+        this.enrollmentNo = enrollmentNo;
+        this.department = department;
+        this.semester = semester;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.phone = phone;
+        this.bio = bio;
+    }
+
+    // 3. All-arguments constructor (used when fetching from Database)
+    public User(int userId, String fullName, String enrollmentNo, String department,
+                int semester, String email, String passwordHash, String phone,
+                String bio, boolean isActive, LocalDateTime createdAt, int credits) {
+        this.userId = userId;
+        this.fullName = fullName;
+        this.enrollmentNo = enrollmentNo;
+        this.department = department;
+        this.semester = semester;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.phone = phone;
+        this.bio = bio;
+        this.isActive = isActive;
+        this.createdAt = createdAt;
+        this.credits = credits;
+    }
+
+    // Existing Getters and Setters
+    public int getUserId() { return userId; }
+    public void setUserId(int userId) { this.userId = userId; }
+
+    public String getFullName() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
+
+    public String getEnrollmentNo() { return enrollmentNo; }
+    public void setEnrollmentNo(String enrollmentNo) { this.enrollmentNo = enrollmentNo; }
+
+    public String getDepartment() { return department; }
+    public void setDepartment(String department) { this.department = department; }
+
+    public int getSemester() { return semester; }
+    public void setSemester(int semester) { this.semester = semester; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
+    public String getBio() { return bio; }
+    public void setBio(String bio) { this.bio = bio; }
+
+    public boolean isActive() { return isActive; }
+    public void setActive(boolean active) { isActive = active; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    // NEW: Credits Getter and Setter
+    public int getCredits() { return credits; }
+    public void setCredits(int credits) { this.credits = credits; }
+
+    @Override
+    public String toString() {
+        return "User Profile: [" +
+                "ID=" + userId +
+                ", Name='" + fullName + '\'' +
+                ", Enrollment No='" + enrollmentNo + '\'' +
+                ", Department='" + department + '\'' +
+                ", Semester=" + semester +
+                ", Email='" + email + '\'' +
+                ", Phone='" + phone + '\'' +
+                ", Bio='" + bio + '\'' +
+                ", Credits=" + credits + // Displaying credits
+                ", Active=" + isActive +
+                ']';
+    }
+}
+
+
+========== FILE: UserSkill.java ==========
+
+package com.skillbridge.model;
+
+public class UserSkill
+{
+    // Defining the custom Enums
+    public enum SkillType {
+        TEACHING,
+        LEARNING
+    }
+
+    public enum SkillLevel {
+        BEGINNER,
+        INTERMEDIATE,
+        ADVANCED
+    }
+    private int userSkillId;
+    private int skillId;
+    private int userId;
+    private SkillType skillType;
+    private SkillLevel skillLevel;
+    private boolean isActive;
+
+    public UserSkill(int userSkillId, int skillId, int userId, SkillType skillType, SkillLevel skillLevel, boolean isActive) {
+        this.userSkillId = userSkillId;
+        this.skillId = skillId;
+        this.userId = userId;
+        this.skillType = skillType;
+        this.skillLevel = skillLevel;
+        this.isActive = isActive;
+    }
+
+    public int getUserSkillId() {
+        return userSkillId;
+    }
+
+    public void setUserSkillId(int userSkillId) {
+        this.userSkillId = userSkillId;
+    }
+
+    public int getSkillId() {
+        return skillId;
+    }
+
+    public void setSkillId(int skillId) {
+        this.skillId = skillId;
+    }
+
+    public int getUserId() {
+        return userId;
+    }
+
+    public void setUserId(int userId) {
+        this.userId = userId;
+    }
+
+    public String getSkillType() {
+        String s = skillType.name();
+        return s.charAt(0) + s.substring(1).toLowerCase();
+    }
+
+    public void setSkillType(SkillType skillType) {
+        this.skillType = skillType;
+    }
+
+    public String getSkillLevel() {
+        String s = skillLevel.name();
+        return s.charAt(0) + s.substring(1).toLowerCase();
+    }
+
+    public void setSkillLevel(SkillLevel skillLevel) {
+        this.skillLevel = skillLevel;
+    }
+
+    public boolean isActive() {
+        return isActive;
+    }
+
+    public void setActive(boolean active) {
+        isActive = active;
+    }
+}
+
+
+========== FILE: AuthenticationService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.UserDAO;
+import com.skillbridge.model.User;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
+
+public class AuthenticationService {
+
+    private UserService userService;
+    private UserDAO userDAO;
+
+    private static final Map<String, Integer> loginAttempts = new HashMap<>();
+    private static final int MAX_ATTEMPTS = 5;
+
+    public AuthenticationService() {
+        this.userService = new UserService();
+        this.userDAO = new UserDAO();
+    }
+
+    public boolean register(User newUser) {
+        if (newUser.getEmail() != null) {
+            newUser.setEmail(newUser.getEmail().toLowerCase().trim());
+        }
+
+        if (newUser.getEnrollmentNo() != null) {
+            newUser.setEnrollmentNo(newUser.getEnrollmentNo().toUpperCase().trim());
+        }
+
+        if (!Validator.isValidEmail(newUser.getEmail())) {
+            System.out.println("Registration failed: Invalid email format.");
+            return false;
+        }
+
+        if (!Validator.isValidPassword(newUser.getPasswordHash())) {
+            System.out.println("Registration failed: Password must be at least 6 characters long.");
+            return false;
+        }
+
+        String encryptedPassword = hashPassword(newUser.getPasswordHash());
+        newUser.setPasswordHash(encryptedPassword);
+
+        return userService.registerNewUser(newUser);
+    }
+
+    public boolean login(String email, String password) {
+        if (Validator.isEmptyText(email) || Validator.isEmptyText(password)) {
+            System.out.println("Login failed: Email and Password cannot be empty.");
+            return false;
+        }
+
+        email = email.toLowerCase().trim();
+
+        int attempts = loginAttempts.getOrDefault(email, 0);
+        if (attempts >= MAX_ATTEMPTS) {
+            System.out.println("Login failed: Too many failed attempts. Please try again later.");
+            return false;
+        }
+
+        User user = userDAO.getUserByEmail(email);
+
+        if (user == null) {
+            loginAttempts.put(email, attempts + 1);
+            System.out.println("Login failed: No account found with that email.");
+            return false;
+        }
+
+        String encryptedInputPassword = hashPassword(password);
+        if (!user.getPasswordHash().equals(encryptedInputPassword)) {
+            loginAttempts.put(email, attempts + 1);
+            System.out.println("Login failed: Incorrect password. Attempts remaining: " + (MAX_ATTEMPTS - attempts - 1));
+            return false;
+        }
+
+        if (!user.isActive()) {
+            System.out.println("Login failed: Your account has been deactivated.");
+            return false;
+        }
+
+        loginAttempts.remove(email);
+        SessionManager.login(user);
+
+        return true;
+    }
+
+    public void logout() {
+        SessionManager.logout();
+        System.out.println("You have been successfully logged out.");
+    }
+
+    private String hashPassword(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] encodedHash = digest.digest(password.getBytes());
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : encodedHash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Error: Hashing algorithm not found.", e);
+        }
+    }
+}
+
+
+========== FILE: CreditService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.UserDAO;
+import com.skillbridge.dao.UserSkillDAO;
+import com.skillbridge.model.User;
+import com.skillbridge.model.UserSkill;
+
+import java.util.List;
+
+public class CreditService {
+
+    private final UserDAO userDAO = new UserDAO();
+    private final UserSkillDAO userSkillDAO = new UserSkillDAO();
+
+    /**
+     * Faculty-defined credit costs based on skill level.
+     * Beginner = 5, Intermediate = 7, Advanced = 10
+     */
+    private int getCostByLevel(String skillLevel) {
+        if ("Advanced".equalsIgnoreCase(skillLevel)) return 10;
+        if ("Intermediate".equalsIgnoreCase(skillLevel)) return 7;
+        return 5; // Beginner (default)
+    }
+
+    /**
+     * Processes credit transaction before scheduling a session.
+     * - One Way (Direct): Learner pays teacher based on skill level
+     * - Two Way (Swap): No deduction - both exchange skills free
+     */
+    public boolean processTransaction(int teacherId, int learnerId, int teacherSkillId, boolean isSwap) {
+        User teacher = userDAO.getUserById(teacherId);
+        User learner = userDAO.getUserById(learnerId);
+
+        if (teacher == null || learner == null) {
+            System.out.println("Transaction Failed: Teacher or Learner not found.");
+            return false;
+        }
+
+        // Get teacher's skill level for this specific skill
+        String tLevel = getLevelForSkill(teacherId, teacherSkillId);
+        int teacherCost = getCostByLevel(tLevel);
+
+        if (!isSwap) {
+            // --- ONE WAY LEARNING (Direct) ---
+            if (learner.getCredits() < teacherCost) {
+                System.out.println("Transaction Failed!");
+                System.out.println("Required Credits: " + teacherCost);
+                System.out.println("Your Balance: " + learner.getCredits());
+                System.out.println("You need " + (teacherCost - learner.getCredits()) + " more credits.");
+                return false;
+            }
+
+            // Deduct from learner, add to teacher
+            userDAO.updateUserCredits(learnerId, learner.getCredits() - teacherCost);
+            userDAO.updateUserCredits(teacherId, teacher.getCredits() + teacherCost);
+
+            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+            System.out.println("â•‘       CREDIT TRANSACTION SUCCESS         â•‘");
+            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
+            System.out.println("â•‘ Type: One-Way Learning                   â•‘");
+            System.out.println("â•‘ Skill Level: " + tLevel);
+            System.out.println("â•‘ Credits Paid: " + teacherCost + " to Teacher");
+            System.out.println("â•‘ Your New Balance: " + (learner.getCredits() - teacherCost));
+            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+
+            return true;
+
+        } else {
+            // --- TWO WAY SWAP EXCHANGE ---
+            // No credit deduction - both parties exchange skills freely
+            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+            System.out.println("â•‘       SWAP EXCHANGE APPROVED             â•‘");
+            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
+            System.out.println("â•‘ Type: Two-Way Swap Exchange              â•‘");
+            System.out.println("â•‘ Credits Deducted: 0 (Both parties)       â•‘");
+            System.out.println("â•‘ Both users exchange skills for free!     â•‘");
+            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+
+            return true;
+        }
+    }
+
+    /**
+     * Get skill level for a specific teaching skill of user.
+     */
+    private String getLevelForSkill(int userId, int skillId) {
+        List<UserSkill> skills = userSkillDAO.getSkillsByUserId(userId);
+        for (UserSkill s : skills) {
+            if (s.getSkillId() == skillId && s.getSkillType().equalsIgnoreCase("Teaching")) {
+                return s.getSkillLevel();
+            }
+        }
+        return "Beginner"; // Default
+    }
+
+    /**
+     * Check user's current credit balance
+     */
+    public int getUserCredits(int userId) {
+        User user = userDAO.getUserById(userId);
+        return user != null ? user.getCredits() : 0;
+    }
+}
+
+
+========== FILE: ExchangeRequestService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.ExchangeRequestDAO;
+import com.skillbridge.model.ExchangeRequest;
+
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
+import java.util.Stack;
+
+public class ExchangeRequestService {
+
+    private final ExchangeRequestDAO exchangeRequestDAO = new ExchangeRequestDAO();
+
+    public boolean sendExchangeRequest(int senderId, int receiverId, int requestedSkillId, String exchangeType, String message) {
+        if (senderId == receiverId) {
+            System.out.println("You cannot send a request to yourself.");
+            return false;
+        }
+
+        // Check for duplicate pending request
+        List<ExchangeRequest> existingRequests = exchangeRequestDAO.getRequestsByUserId(senderId);
+        for (ExchangeRequest req : existingRequests) {
+            if (req.getSenderId() == senderId &&
+                    req.getReceiverId() == receiverId &&
+                    req.getRequestedSkillId() == requestedSkillId &&
+                    "Pending".equalsIgnoreCase(req.getStatus())) {
+                System.out.println("You already have a pending request for this skill with this user.");
+                return false;
+            }
+        }
+
+        ExchangeRequest request = new ExchangeRequest();
+        request.setSenderId(senderId);
+        request.setReceiverId(receiverId);
+        request.setRequestedSkillId(requestedSkillId);
+        request.setExchangeType(exchangeType);
+        request.setMessage(message);
+
+        boolean success = exchangeRequestDAO.createRequest(request);
+
+        // POP-UP NOTIFICATION
+        if (success) {
+            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+            System.out.println("â•‘   EXCHANGE REQUEST SENT!                 â•‘");
+            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
+            System.out.println("â•‘ Sent to User ID: " + receiverId);
+            System.out.println("â•‘ Skill ID: " + requestedSkillId);
+            System.out.println("â•‘ Type: " + exchangeType);
+            System.out.println("â•‘ Notification sent to receiver.           â•‘");
+            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+        }
+
+        return success;
+    }
+
+    public boolean acceptExchangeRequest(int requestId, int currentUserId) {
+        ExchangeRequest request = exchangeRequestDAO.getRequestById(requestId);
+        if (request == null) {
+            System.out.println("Request not found.");
+            return false;
+        }
+        if (request.getReceiverId() != currentUserId) {
+            System.out.println("Unauthorized: Only the receiver can accept.");
+            return false;
+        }
+        if (!"Pending".equalsIgnoreCase(request.getStatus())) {
+            System.out.println("Request is not pending.");
+            return false;
+        }
+
+        boolean success = exchangeRequestDAO.updateStatus(requestId, "Accepted");
+
+        // POP-UP NOTIFICATION
+        if (success) {
+            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+            System.out.println("â•‘   REQUEST ACCEPTED SUCCESSFULLY!         â•‘");
+            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
+            System.out.println("â•‘ Request ID: " + requestId);
+            System.out.println("â•‘ You can now schedule the session.        â•‘");
+            System.out.println("â•‘ Notification sent to sender.             â•‘");
+            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+        }
+
+        return success;
+    }
+
+    public boolean rejectExchangeRequest(int requestId, int currentUserId) {
+        ExchangeRequest request = exchangeRequestDAO.getRequestById(requestId);
+        if (request == null) {
+            System.out.println("Request not found.");
+            return false;
+        }
+        if (request.getReceiverId() != currentUserId) {
+            System.out.println("Unauthorized: Only the receiver can reject.");
+            return false;
+        }
+        if (!"Pending".equalsIgnoreCase(request.getStatus())) {
+            System.out.println("Request is not pending.");
+            return false;
+        }
+
+        boolean success = exchangeRequestDAO.updateStatus(requestId, "Rejected");
+
+        // POP-UP NOTIFICATION
+        if (success) {
+            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+            System.out.println("â•‘   REQUEST REJECTED                       â•‘");
+            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
+            System.out.println("â•‘ Request ID: " + requestId);
+            System.out.println("â•‘ Notification sent to sender.             â•‘");
+            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+        }
+
+        return success;
+    }
+
+    public boolean cancelExchangeRequest(int requestId, int currentUserId) {
+        ExchangeRequest request = exchangeRequestDAO.getRequestById(requestId);
+        if (request == null) {
+            System.out.println("Request not found.");
+            return false;
+        }
+        if (request.getSenderId() != currentUserId) {
+            System.out.println("Unauthorized: Only the sender can cancel.");
+            return false;
+        }
+        if (!"Pending".equalsIgnoreCase(request.getStatus())) {
+            System.out.println("Only pending requests can be cancelled.");
+            return false;
+        }
+
+        boolean success = exchangeRequestDAO.updateStatus(requestId, "Cancelled");
+
+        // POP-UP NOTIFICATION
+        if (success) {
+            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+            System.out.println("â•‘   REQUEST CANCELLED                      â•‘");
+            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
+            System.out.println("â•‘ Request ID: " + requestId);
+            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+        }
+
+        return success;
+    }
+
+    // Return as LinkedList (Data Structure requirement)
+    public List<ExchangeRequest> getUserRequestHistory(int userId) {
+        return new LinkedList<>(exchangeRequestDAO.getRequestsByUserId(userId));
+    }
+
+    /**
+     * QUEUE Data Structure - Get pending requests in FIFO order
+     * (First received request should be accepted first)
+     */
+    public Queue<ExchangeRequest> getPendingRequestsQueue(int receiverId) {
+        Queue<ExchangeRequest> pendingQueue = new LinkedList<>();
+        List<ExchangeRequest> allRequests = exchangeRequestDAO.getRequestsByUserId(receiverId);
+
+        // Sort by date (oldest first) and add to queue
+        allRequests.sort((r1, r2) -> r1.getRequestDate().compareTo(r2.getRequestDate()));
+
+        for (ExchangeRequest req : allRequests) {
+            if (req.getReceiverId() == receiverId && "Pending".equalsIgnoreCase(req.getStatus())) {
+                pendingQueue.offer(req); // FIFO
+            }
+        }
+
+        return pendingQueue;
+    }
+
+    /**
+     * STACK Data Structure - Get notifications history (LIFO - Latest first)
+     */
+    public Stack<ExchangeRequest> getRequestNotificationsStack(int userId) {
+        Stack<ExchangeRequest> notificationStack = new Stack<>();
+        List<ExchangeRequest> allRequests = exchangeRequestDAO.getRequestsByUserId(userId);
+
+        // Sort by date (oldest first) then push to stack (latest goes on top)
+        allRequests.sort((r1, r2) -> r1.getRequestDate().compareTo(r2.getRequestDate()));
+
+        for (ExchangeRequest req : allRequests) {
+            notificationStack.push(req); // LIFO - Latest on top
+        }
+
+        return notificationStack;
+    }
+}
+
+
+========== FILE: FeedbackService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.FeedbackDAO;
+import com.skillbridge.dao.LearningSessionDAO;
+import com.skillbridge.model.Feedback;
+import com.skillbridge.model.LearningSession;
+
+import java.util.List;
+
+public class FeedbackService {
+
+    private final FeedbackDAO feedbackDAO;
+    private final LearningSessionDAO sessionDAO;
+
+    public FeedbackService() {
+        this.feedbackDAO = new FeedbackDAO();
+        this.sessionDAO = new LearningSessionDAO();
+    }
+
+    public boolean leaveFeedback(int sessionId, int reviewerId, int reviewedUserId, int rating, String comment) {
+        if (sessionId <= 0 || reviewerId <= 0 || reviewedUserId <= 0) {
+            System.err.println("âŒ Validation Error: Invalid IDs provided.");
+            return false;
+        }
+
+        if (rating < 1 || rating > 5) {
+            System.err.println("âŒ Validation Error: Rating must be between 1 and 5.");
+            return false;
+        }
+
+        if (reviewerId == reviewedUserId) {
+            System.err.println("âŒ You cannot review yourself.");
+            return false;
+        }
+
+        // FIX: Check if session exists and is Completed
+        LearningSession session = sessionDAO.getSessionById(sessionId);
+        if (session == null) {
+            System.err.println("âŒ Session not found.");
+            return false;
+        }
+
+        if (!"Completed".equalsIgnoreCase(session.getStatus())) {
+            System.err.println("âŒ You can only submit feedback for Completed sessions.");
+            return false;
+        }
+
+        // FIX: Reviewer must be part of the session (teacher OR learner)
+        if (session.getTeacherId() != reviewerId && session.getLearnerId() != reviewerId) {
+            System.err.println("âŒ Unauthorized: You were not part of this session.");
+            return false;
+        }
+
+        // FIX: Reviewed user must be the OTHER person in the session
+        if (session.getTeacherId() != reviewedUserId && session.getLearnerId() != reviewedUserId) {
+            System.err.println("âŒ Invalid: Reviewed user is not part of this session.");
+            return false;
+        }
+
+        Feedback feedback = new Feedback();
+        feedback.setSessionId(sessionId);
+        feedback.setReviewerId(reviewerId);
+        feedback.setReviewedUserId(reviewedUserId);
+        feedback.setRating(rating);
+        feedback.setComment(comment);
+
+        boolean isSubmitted = feedbackDAO.submitFeedback(feedback);
+
+        if (isSubmitted) {
+            System.out.println("âœ… Feedback successfully submitted. Thank you!");
+        } else {
+            System.err.println("âŒ Failed to submit feedback. You may have already reviewed this session.");
+        }
+
+        return isSubmitted;
+    }
+
+    public List<Feedback> getFeedbackForUser(int userId) {
+        List<Feedback> feedbackList = feedbackDAO.getFeedbackByReviewedUser(userId);
+        if (feedbackList == null || feedbackList.isEmpty()) {
+            System.out.println("â„¹ï¸ No feedback found for this user yet.");
+        }
+        return feedbackList;
+    }
+
+    public List<String> getSkillWiseFeedbackSummary(int userId) {
+        return feedbackDAO.getSkillWiseFeedbackForUser(userId);
+    }
+}
+
+
+========== FILE: LeaderboardService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.model.LeaderboardEntry;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.sql.*;
+import java.util.LinkedList;
+import java.util.Queue;
+
+public class LeaderboardService {
+
+    private static final String FILE_PATH = "leaderboard.txt";
+
+    /**
+     * Generates leaderboard using QUEUE Data Structure.
+     * Rank users by credits (highest first), fetches all 10 required fields.
+     */
+    public Queue<LeaderboardEntry> buildLeaderboardQueue() {
+        Queue<LeaderboardEntry> leaderboardQueue = new LinkedList<>();
+
+        String sql = "SELECT u.user_id, u.full_name, u.department, u.semester, u.credits, u.is_active, " +
+                "(SELECT COUNT(*) FROM LearningSessions ls WHERE ls.teacher_id = u.user_id) AS teaching_count, " +
+                "(SELECT COUNT(*) FROM LearningSessions ls WHERE ls.learner_id = u.user_id) AS learning_count, " +
+                "(SELECT COUNT(*) FROM LearningSessions ls WHERE (ls.teacher_id = u.user_id OR ls.learner_id = u.user_id) AND ls.status = 'Completed') AS completed_count, " +
+                "(SELECT COALESCE(AVG(f.rating), 0) FROM Feedback f WHERE f.reviewed_user_id = u.user_id) AS avg_rating " +
+                "FROM Users u WHERE u.is_active = true " +
+                "ORDER BY u.credits DESC LIMIT 20";
+
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            int rank = 1;
+            while (rs.next()) {
+                LeaderboardEntry entry = new LeaderboardEntry(
+                        rank++,
+                        rs.getInt("user_id"),
+                        rs.getString("full_name"),
+                        rs.getString("department"),
+                        rs.getInt("semester"),
+                        rs.getInt("credits"),
+                        rs.getInt("teaching_count"),
+                        rs.getInt("learning_count"),
+                        rs.getInt("completed_count"),
+                        rs.getDouble("avg_rating"),
+                        rs.getBoolean("is_active")
+                );
+                leaderboardQueue.offer(entry); // Add to Queue
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching leaderboard: " + e.getMessage());
+        }
+
+        return leaderboardQueue;
+    }
+
+    /**
+     * Write leaderboard to TXT file using Queue.
+     * Poll from queue (FIFO) and write to file.
+     */
+    public void generateLeaderboardFile() {
+        Queue<LeaderboardEntry> queue = buildLeaderboardQueue();
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH))) {
+            writer.write("========================================\n");
+            writer.write("       SKILLBRIDGE LEADERBOARD\n");
+            writer.write("       (Top Peer Learners)\n");
+            writer.write("========================================\n\n");
+
+            if (queue.isEmpty()) {
+                writer.write("No active users found.\n");
+                return;
+            }
+
+            // Process Queue (FIFO)
+            while (!queue.isEmpty()) {
+                LeaderboardEntry entry = queue.poll();
+                writer.write(entry.toFormattedString() + "\n");
+                writer.write("----------------------------------------\n");
+            }
+
+            writer.write("\nGenerated using Queue Data Structure\n");
+
+        } catch (IOException e) {
+            System.err.println("File I/O Error writing leaderboard: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Display leaderboard in console + also update file
+     */
+    public void displayLeaderboard() {
+        generateLeaderboardFile();
+
+        System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
+        System.out.println("â•‘        SKILLBRIDGE OVERALL STUDENTS RANKING             â•‘");
+        System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+        } catch (IOException e) {
+            System.err.println("Error reading leaderboard file: " + e.getMessage());
+        }
+
+        System.out.println("\nFile saved at: " + FILE_PATH);
+    }
+}
+
+
+========== FILE: LearningSessionService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.ExchangeRequestDAO;
+import com.skillbridge.dao.LearningSessionDAO;
+import com.skillbridge.dao.UserDAO;
+import com.skillbridge.dao.UserSkillDAO;
+import com.skillbridge.model.ExchangeRequest;
+import com.skillbridge.model.LearningSession;
+import com.skillbridge.model.User;
+import com.skillbridge.model.UserSkill;
+import com.skillbridge.util.Validator;
+
+import java.util.LinkedList;
+import java.util.List;
+
+public class LearningSessionService {
+
+    private LearningSessionDAO sessionDAO;
+    private ExchangeRequestDAO requestDAO;
+    private CreditService creditService;
+    private UserDAO userDAO;
+    private UserSkillDAO userSkillDAO;
+
+    public LearningSessionService() {
+        this.sessionDAO = new LearningSessionDAO();
+        this.requestDAO = new ExchangeRequestDAO();
+        this.creditService = new CreditService();
+        this.userDAO = new UserDAO();
+        this.userSkillDAO = new UserSkillDAO();
+    }
+
+    public boolean scheduleSession(LearningSession session) {
+        if (!Validator.isFutureDate(session.getSessionDate())) {
+            System.out.println("Schedule failed: Date must be today or in the future.");
+            return false;
+        }
+
+        if (!Validator.isValidTimeRange(session.getStartTime(), session.getEndTime())) {
+            System.out.println("Schedule failed: End time must be after start time.");
+            return false;
+        }
+
+        if (Validator.isEmptyText(session.getMode())) {
+            System.out.println("Schedule failed: Please specify Online or Offline.");
+            return false;
+        }
+
+        // LinkedList Data Structure - Time clash check for teacher
+        LinkedList<LearningSession> teacherSessions = new LinkedList<>(sessionDAO.getSessionsByUser(session.getTeacherId()));
+        for (LearningSession existing : teacherSessions) {
+            if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
+                    existing.getSessionDate().equals(session.getSessionDate())) {
+                boolean overlap = session.getStartTime().isBefore(existing.getEndTime()) &&
+                        session.getEndTime().isAfter(existing.getStartTime());
+                if (overlap) {
+                    System.out.println("Teacher is already booked during this time!");
+                    return false;
+                }
+            }
+        }
+
+        // LinkedList Data Structure - Time clash check for learner
+        LinkedList<LearningSession> learnerSessions = new LinkedList<>(sessionDAO.getSessionsByUser(session.getLearnerId()));
+        for (LearningSession existing : learnerSessions) {
+            if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
+                    existing.getSessionDate().equals(session.getSessionDate())) {
+                boolean overlap = session.getStartTime().isBefore(existing.getEndTime()) &&
+                        session.getEndTime().isAfter(existing.getStartTime());
+                if (overlap) {
+                    System.out.println("Learner is already booked during this time!");
+                    return false;
+                }
+            }
+        }
+
+        // Credit System - Process transaction
+        ExchangeRequest request = requestDAO.getRequestById(session.getRequestId());
+        boolean isSwap = request != null && "Swap".equalsIgnoreCase(request.getExchangeType());
+
+        boolean transactionSuccess = creditService.processTransaction(
+                session.getTeacherId(),
+                session.getLearnerId(),
+                session.getSkillId(),
+                isSwap
+        );
+
+        if (!transactionSuccess) {
+            return false;
+        }
+
+        boolean success = sessionDAO.scheduleSession(session);
+
+        // POP-UP NOTIFICATION
+        if (success) {
+            System.out.println("\n===========================================");
+            System.out.println("|      SESSION SCHEDULED SUCCESSFULLY!    |");
+            System.out.println("===========================================");
+            System.out.println("Date         : " + session.getSessionDate());
+            System.out.println("Time         : " + session.getStartTime() + " to " + session.getEndTime());
+            System.out.println("Mode         : " + session.getMode());
+            System.out.println("Notification sent to both users.");
+            System.out.println("===========================================\n");
+        }
+
+        return success;
+    }
+
+    public List<LearningSession> getUserSessionHistory(int userId) {
+        return new LinkedList<>(sessionDAO.getSessionsByUser(userId));
+    }
+
+    public boolean completeSession(int sessionId, int currentUserId) {
+        LearningSession session = sessionDAO.getSessionById(sessionId);
+
+        if (session == null) {
+            System.out.println("Session not found.");
+            return false;
+        }
+
+        if (session.getTeacherId() != currentUserId && session.getLearnerId() != currentUserId) {
+            System.out.println("Unauthorized: Only session participants can mark it complete.");
+            return false;
+        }
+
+        if (session.getStatus().equalsIgnoreCase("Completed")) {
+            System.out.println("Session is already completed!");
+            return false;
+        }
+
+        if (session.getStatus().equalsIgnoreCase("Cancelled")) {
+            System.out.println("Cannot complete a cancelled session.");
+            return false;
+        }
+
+        boolean success = sessionDAO.markSessionCompleted(sessionId);
+
+        // POP-UP NOTIFICATION
+        if (success) {
+            System.out.println("\n===========================================");
+            System.out.println("|      SESSION COMPLETED SUCCESSFULLY!    |");
+            System.out.println("===========================================");
+            System.out.println("Session ID  : " + sessionId);
+            System.out.println("Please submit your feedback for teacher.");
+            System.out.println("===========================================\n");
+        }
+
+        return success;
+    }
+
+    public boolean cancelSession(int sessionId, int currentUserId) {
+        LearningSession session = sessionDAO.getSessionById(sessionId);
+
+        if (session == null) {
+            System.out.println("Session not found.");
+            return false;
+        }
+
+        if (session.getTeacherId() != currentUserId && session.getLearnerId() != currentUserId) {
+            System.out.println("Unauthorized: Only session participants can cancel it.");
+            return false;
+        }
+
+        if (!session.getStatus().equalsIgnoreCase("Scheduled")) {
+            System.out.println("Only Scheduled sessions can be cancelled.");
+            return false;
+        }
+
+        // CANCELLATION POLICY - 2 HOUR RULE
+        java.time.LocalDateTime sessionDateTime = java.time.LocalDateTime.of(
+                session.getSessionDate(),
+                session.getStartTime()
+        );
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        long hoursUntilSession = java.time.Duration.between(now, sessionDateTime).toHours();
+
+        if (hoursUntilSession < 0) {
+            System.out.println("Cannot cancel: This session has already started or completed.");
+            return false;
+        }
+
+        ExchangeRequest request = requestDAO.getRequestById(session.getRequestId());
+        boolean wasCharged = request != null && "Direct".equalsIgnoreCase(request.getExchangeType());
+        boolean eligibleForRefund = hoursUntilSession >= 2;
+
+        // Show cancellation policy
+        System.out.println("\n===========================================");
+        System.out.println("|    CANCELLATION POLICY NOTICE            |");
+        System.out.println("===========================================");
+        System.out.println("Time until session: " + hoursUntilSession + " hours");
+
+        if (wasCharged) {
+            String tLevel = getTeacherSkillLevel(session.getTeacherId(), session.getSkillId());
+            int totalCost = getCostByLevel(tLevel);
+
+            if (eligibleForRefund) {
+                System.out.println("Refund: " + totalCost + " credits (Full Refund - 2+ hours before)");
+            } else {
+                System.out.println("Refund: 0 credits (No refund - within 2 hours)");
+                System.out.println("Reason: Teacher's time is valuable and cannot be recovered.");
+            }
+        }
+        System.out.println("===========================================");
+
+        // Confirm cancellation
+        System.out.print("\nDo you still want to cancel? (yes/no): ");
+        java.util.Scanner sc = new java.util.Scanner(System.in);
+        String confirm = sc.nextLine();
+
+        if (!confirm.equalsIgnoreCase("yes") && !confirm.equalsIgnoreCase("y")) {
+            System.out.println("Cancellation aborted.");
+            return false;
+        }
+
+        // Update database (Trigger will auto-fire!)
+        boolean success = sessionDAO.updateSessionStatus(sessionId, "Cancelled");
+
+        // Apply refund only if eligible
+        if (success && wasCharged && eligibleForRefund) {
+            String tLevel = getTeacherSkillLevel(session.getTeacherId(), session.getSkillId());
+            int refundAmount = getCostByLevel(tLevel);
+
+            User teacher = userDAO.getUserById(session.getTeacherId());
+            User learner = userDAO.getUserById(session.getLearnerId());
+
+            if (teacher != null && learner != null) {
+                userDAO.updateUserCredits(learner.getUserId(), learner.getCredits() + refundAmount);
+                userDAO.updateUserCredits(teacher.getUserId(), teacher.getCredits() - refundAmount);
+                System.out.println("Full refund processed: " + refundAmount + " credits returned to learner.");
+            }
+        } else if (success && wasCharged && !eligibleForRefund) {
+            System.out.println("No refund issued. Teacher keeps credits as compensation.");
+        }
+
+        // Success message (Trigger handles notification automatically!)
+        if (success) {
+            System.out.println("\n===========================================");
+            System.out.println("|      SESSION CANCELLED SUCCESSFULLY!    |");
+            System.out.println("===========================================");
+            System.out.println("Session ID  : " + sessionId);
+            System.out.println("Both users notified via database trigger.");
+            System.out.println("===========================================\n");
+        }
+
+        return success;
+    }
+
+    // Helper method to get credit cost based on skill level
+    private int getCostByLevel(String skillLevel) {
+        if ("Advanced".equalsIgnoreCase(skillLevel)) return 10;
+        if ("Intermediate".equalsIgnoreCase(skillLevel)) return 7;
+        return 5;
+    }
+
+    // Helper method to get teacher's skill level for a specific skill
+    private String getTeacherSkillLevel(int teacherId, int skillId) {
+        List<UserSkill> skills = userSkillDAO.getSkillsByUserId(teacherId);
+        for (UserSkill s : skills) {
+            if (s.getSkillId() == skillId && s.getSkillType().equalsIgnoreCase("Teaching")) {
+                return s.getSkillLevel();
+            }
+        }
+        return "Beginner";
+    }
+}
+
+
+========== FILE: ManagerService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.ManagerDAO;
+import com.skillbridge.model.*;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.List;
+
+public class ManagerService {
+
+    private final ManagerDAO managerDAO = new ManagerDAO();
+
+    // Manager login
+    public Manager loginManager(String username, String password) {
+        if (username == null || password == null || username.trim().isEmpty()) {
+            System.out.println("Username and password cannot be empty.");
+            return null;
+        }
+
+        Manager manager = managerDAO.getManagerByUsername(username.trim());
+        if (manager == null) {
+            System.out.println("Manager not found.");
+            return null;
+        }
+
+        String hashedInput = hashPassword(password);
+        if (!manager.getPasswordHash().equals(hashedInput)) {
+            System.out.println("Incorrect password.");
+            return null;
+        }
+
+
+        return manager;
+    }
+
+    // Get all users
+    public List<User> getAllUsers() {
+        return managerDAO.getAllUsers();
+    }
+
+    // Get all skills
+    public List<Skill> getAllSkills() {
+        return managerDAO.getAllSkills();
+    }
+
+    // Get all exchange requests
+    public List<ExchangeRequest> getAllRequests() {
+        return managerDAO.getAllRequests();
+    }
+
+    // Get all sessions
+    public List<LearningSession> getAllSessions() {
+        return managerDAO.getAllSessions();
+    }
+
+    // Get all feedback
+    public List<Feedback> getAllFeedback() {
+        return managerDAO.getAllFeedback();
+    }
+
+    private String hashPassword(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] encodedHash = digest.digest(password.getBytes());
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : encodedHash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Hashing error", e);
+        }
+    }
+}
+
+
+========== FILE: RecommendationService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.model.User;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+public class RecommendationService {
+
+    /**
+     * Enhanced recommendation method that incorporates matching validation,
+     * self-match prevention, and priority sorting based on ratings, review counts,
+     * skill levels, and user demographics[cite: 1].
+     */
+    public List<User> getRecommendedTeachers(int learnerId, int desiredSkillId) {
+        List<TeacherScore> scoredTeachers = new ArrayList<>();
+        User learner = fetchUserById(learnerId);
+
+        String sql = "SELECT u.*, us.skill_level FROM Users u " +
+                "JOIN UserSkills us ON u.user_id = us.user_id " +
+                "WHERE us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, desiredSkillId);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                int teacherId = rs.getInt("user_id");
+
+                // Feature from MatchmakingService: Prevent learners from matching with themselves
+                if (teacherId == learnerId) {
+                    continue;
+                }
+
+                User teacher = mapResultSetToUser(rs);
+                String skillLevel = rs.getString("skill_level");
+
+                double avgRating = getAverageRatingForTeacherSkill(teacherId, desiredSkillId);
+                int reviewCount = getReviewCountForTeacherSkill(teacherId, desiredSkillId);
+
+                int score = 0;
+                // Priority scoring calculation
+                score += (int) (avgRating * 100);
+                score += (reviewCount * 10);
+
+                if ("Advanced".equalsIgnoreCase(skillLevel)) score += 50;
+                else if ("Intermediate".equalsIgnoreCase(skillLevel)) score += 30;
+                else if ("Beginner".equalsIgnoreCase(skillLevel)) score += 10;
+
+                if (learner != null) {
+                    if (learner.getDepartment() != null && learner.getDepartment().equalsIgnoreCase(teacher.getDepartment())) {
+                        score += 20; // Same department bonus
+                    }
+                    if (learner.getSemester() == teacher.getSemester()) {
+                        score += 10; // Same semester bonus
+                    }
+                }
+
+                scoredTeachers.add(new TeacherScore(teacher, score));
+            }
+        } catch (SQLException e) {
+            System.err.println("âŒ Error fetching recommendations and matches: " + e.getMessage());
+        }
+
+        // Sort descending by calculated priority score
+        scoredTeachers.sort(Comparator.comparingInt(TeacherScore::getScore).reversed());
+
+        List<User> sortedTeachers = new ArrayList<>();
+        for (TeacherScore ts : scoredTeachers) {
+            sortedTeachers.add(ts.getTeacher());
+        }
+
+        if (sortedTeachers.isEmpty()) {
+            System.out.println("â„¹ï¸ No active teachers found for this skill match.");
+        } else {
+            System.out.println("âœ… Found " + sortedTeachers.size() + " recommended teacher(s)!");
+        }
+
+        return sortedTeachers;
+    }
+
+    private double getAverageRatingForTeacherSkill(int userId, int skillId) {
+        String sql = "SELECT AVG(f.rating) as avg_rating FROM Feedback f " +
+                "JOIN LearningSessions ls ON f.session_id = ls.session_id " +
+                "WHERE f.reviewed_user_id = ? AND ls.skill_id = ?";
+        try (Connection conn = DBConnection.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            stmt.setInt(2, skillId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) return rs.getDouble("avg_rating");
+        } catch (SQLException e) { e.printStackTrace(); }
+        return 0.0;
+    }
+
+    private int getReviewCountForTeacherSkill(int userId, int skillId) {
+        String sql = "SELECT COUNT(f.feedback_id) as review_count FROM Feedback f " +
+                "JOIN LearningSessions ls ON f.session_id = ls.session_id " +
+                "WHERE f.reviewed_user_id = ? AND ls.skill_id = ?";
+        try (Connection conn = DBConnection.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            stmt.setInt(2, skillId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) return rs.getInt("review_count");
+        } catch (SQLException e) { e.printStackTrace(); }
+        return 0;
+    }
+
+    private User fetchUserById(int userId) {
+        String sql = "SELECT * FROM Users WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) return mapResultSetToUser(rs);
+        } catch (SQLException e) { e.printStackTrace(); }
+        return null;
+    }
+
+    private User mapResultSetToUser(ResultSet rs) throws SQLException {
+        User user = new User();
+        user.setUserId(rs.getInt("user_id"));
+        user.setFullName(rs.getString("full_name"));
+        user.setEnrollmentNo(rs.getString("enrollment_no"));
+        user.setDepartment(rs.getString("department"));
+        user.setSemester(rs.getInt("semester"));
+        user.setEmail(rs.getString("email"));
+        user.setPasswordHash(rs.getString("password_hash"));
+        user.setPhone(rs.getString("phone"));
+        user.setBio(rs.getString("bio"));
+        user.setActive(rs.getBoolean("is_active"));
+        return user;
+    }
+
+    private static class TeacherScore {
+        private final User teacher;
+        private final int score;
+
+        public TeacherScore(User teacher, int score) {
+            this.teacher = teacher;
+            this.score = score;
+        }
+
+        public User getTeacher() { return teacher; }
+        public int getScore() { return score; }
+    }
+}
+
+
+========== FILE: SearchService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.model.User;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class SearchService {
+
+    // ==========================================
+    // BST NODE (Inner Class) - Data Structure
+    // ==========================================
+    private static class BSTNode {
+        User user;
+        BSTNode left, right;
+
+        BSTNode(User user) {
+            this.user = user;
+        }
+    }
+
+    // BST Root
+    private BSTNode root;
+
+    /**
+     * Insert user into BST (sorted by user_id).
+     */
+    private BSTNode insertBST(BSTNode node, User user) {
+        if (node == null) return new BSTNode(user);
+
+        if (user.getUserId() < node.user.getUserId()) {
+            node.left = insertBST(node.left, user);
+        } else if (user.getUserId() > node.user.getUserId()) {
+            node.right = insertBST(node.right, user);
+        }
+        return node;
+    }
+
+    /**
+     * In-order traversal to get sorted list from BST.
+     */
+    private void inOrderTraversal(BSTNode node, List<User> result) {
+        if (node == null) return;
+        inOrderTraversal(node.left, result);
+        result.add(node.user);
+        inOrderTraversal(node.right, result);
+    }
+
+    /**
+     * Search Students by Department using BST.
+     * Users are fetched from DB, inserted into BST, then traversed sorted.
+     */
+    public List<User> searchStudentsByDepartment(String department, int skillId) {
+        root = null; // Reset BST
+        List<User> sortedUsers = new ArrayList<>();
+
+        String sql = "SELECT u.* FROM Users u " +
+                "JOIN UserSkills us ON u.user_id = us.user_id " +
+                "WHERE u.department = ? AND us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, department);
+            stmt.setInt(2, skillId);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                User user = mapResultSetToUser(rs);
+                root = insertBST(root, user); // Insert into BST
+            }
+
+            inOrderTraversal(root, sortedUsers); // Get sorted result
+
+        } catch (SQLException e) {
+            System.err.println("Error searching students by department: " + e.getMessage());
+        }
+
+        return sortedUsers;
+    }
+
+    /**
+     * Search Students by Semester using BST.
+     */
+    public List<User> searchStudentsBySemester(int semester, int skillId) {
+        root = null; // Reset BST
+        List<User> sortedUsers = new ArrayList<>();
+
+        String sql = "SELECT u.* FROM Users u " +
+                "JOIN UserSkills us ON u.user_id = us.user_id " +
+                "WHERE u.semester = ? AND us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, semester);
+            stmt.setInt(2, skillId);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                User user = mapResultSetToUser(rs);
+                root = insertBST(root, user);
+            }
+
+            inOrderTraversal(root, sortedUsers);
+
+        } catch (SQLException e) {
+            System.err.println("Error searching students by semester: " + e.getMessage());
+        }
+
+        return sortedUsers;
+    }
+
+    private User mapResultSetToUser(ResultSet rs) throws SQLException {
+        User user = new User();
+        user.setUserId(rs.getInt("user_id"));
+        user.setFullName(rs.getString("full_name"));
+        user.setEnrollmentNo(rs.getString("enrollment_no"));
+        user.setDepartment(rs.getString("department"));
+        user.setSemester(rs.getInt("semester"));
+        user.setEmail(rs.getString("email"));
+        user.setPasswordHash(rs.getString("password_hash"));
+        user.setPhone(rs.getString("phone"));
+        user.setBio(rs.getString("bio"));
+        user.setActive(rs.getBoolean("is_active"));
+        user.setCredits(rs.getInt("credits"));
+        return user;
+    }
+}
+
+
+========== FILE: SkillService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.SkillDAO;
+import com.skillbridge.model.Skill;
+
+import java.util.List;
+
+public class SkillService {
+
+    private final SkillDAO skillDAO;
+
+    public SkillService() {
+        this.skillDAO = new SkillDAO();
+    }
+
+    public List<Skill> getAllSkills() {
+        List<Skill> skills = skillDAO.getAllSkills();
+        if (skills == null || skills.isEmpty()) {
+            System.out.println("â„¹ï¸ The skill catalog is currently empty.");
+        }
+        return skills;
+    }
+
+    public boolean addNewSkill(Skill newSkill) {
+        if (newSkill.getSkillName() == null || newSkill.getSkillName().trim().isEmpty()) {
+            System.err.println("âŒ Skill name cannot be empty.");
+            return false;
+        }
+
+        if (newSkill.getCategory() == null || newSkill.getCategory().trim().isEmpty()) {
+            System.err.println("âŒ Category cannot be empty.");
+            return false;
+        }
+
+        if (newSkill.getDescription() == null || newSkill.getDescription().trim().isEmpty()) {
+            System.err.println("âŒ Description cannot be empty.");
+            return false;
+        }
+
+        // FIX: Normalize skill name (Title Case) to prevent duplicates
+        String normalizedName = newSkill.getSkillName().trim();
+        newSkill.setSkillName(normalizedName);
+
+        // FIX: Case-insensitive duplicate check
+        List<Skill> existingSkills = skillDAO.getAllSkills();
+        for (Skill existing : existingSkills) {
+            if (existing.getSkillName().equalsIgnoreCase(normalizedName)) {
+                System.err.println("âŒ Skill '" + normalizedName + "' already exists.");
+                return false;
+            }
+        }
+
+        boolean isAdded = skillDAO.addSkill(newSkill);
+        if (isAdded) {
+            System.out.println("âœ… Successfully added '" + normalizedName + "' to the catalog!");
+        } else {
+            System.err.println("âŒ Failed to add skill.");
+        }
+        return isAdded;
+    }
+}
+
+
+========== FILE: UserService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.UserDAO;
+import com.skillbridge.model.User;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+public class UserService {
+
+    private UserDAO userDAO;
+
+    public UserService() {
+        this.userDAO = new UserDAO();
+    }
+
+    public boolean isEmailTaken(String email) {
+        return userDAO.getUserByEmail(email) != null;
+    }
+
+    public boolean isEnrollmentNoTaken(String enrollmentNo) {
+        return userDAO.getUserByEnrollmentNo(enrollmentNo) != null;
+    }
+
+    public boolean registerNewUser(User user) {
+        if (isEmailTaken(user.getEmail())) {
+            System.out.println("âŒ Email already registered.");
+            return false;
+        }
+
+        if (isEnrollmentNoTaken(user.getEnrollmentNo())) {
+            System.out.println("âŒ Enrollment number already registered.");
+            return false;
+        }
+
+        return userDAO.createUser(user);
+    }
+
+    public User getUserProfile(int userId) {
+        return userDAO.getUserById(userId);
+    }
+
+    public boolean updateUserProfile(User user) {
+        if (!Validator.isValidPhone(user.getPhone())) {
+            System.out.println("âŒ Phone must be exactly 10 digits.");
+            return false;
+        }
+
+        if (Validator.isEmptyText(user.getFullName())) {
+            System.out.println("âŒ Name cannot be empty.");
+            return false;
+        }
+
+        boolean success = userDAO.updateUser(user);
+
+        if (success) {
+            System.out.println("âœ… Profile updated successfully!");
+            // FIX: Refresh SessionManager with new data
+            User updatedUser = userDAO.getUserById(user.getUserId());
+            if (updatedUser != null) {
+                SessionManager.login(updatedUser);
+            }
+        } else {
+            System.out.println("âŒ Failed to update profile.");
+        }
+
+        return success;
+    }
+}
+
+
+========== FILE: UserSkillService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.UserSkillDAO;
+import com.skillbridge.model.UserSkill;
+
+import java.util.List;
+
+public class UserSkillService {
+
+    private final UserSkillDAO userSkillDAO;
+
+    public UserSkillService() {
+        this.userSkillDAO = new UserSkillDAO();
+    }
+
+    public boolean addSkillToUser(int userId, int skillId, String skillType, String skillLevel) {
+        try {
+            // Using Member 2's constructor to convert Strings to their Enums safely
+            // Passed 0 for ID because the database auto-increments it
+            UserSkill userSkill = new UserSkill(
+                    0,
+                    skillId,
+                    userId,
+                    UserSkill.SkillType.valueOf(skillType.toUpperCase()),
+                    UserSkill.SkillLevel.valueOf(skillLevel.toUpperCase()),
+                    true
+            );
+
+            return userSkillDAO.addUserSkill(userSkill);
+
+        } catch (IllegalArgumentException e) {
+            System.out.println("âŒ Invalid Skill Type or Level format. Please type exactly 'TEACHING' or 'LEARNING'.");
+            return false;
+        }
+    }
+
+    public List<UserSkill> getUserSkills(int userId) {
+        return userSkillDAO.getSkillsByUserId(userId);
+    }
+
+    public boolean removeSkillFromUser(int userSkillId) {
+        return userSkillDAO.deleteUserSkill(userSkillId);
+    }
+}
+
+
+========== FILE: SessionManager.java ==========
+
+package com.skillbridge.util;
+
+import com.skillbridge.model.User;
+
+public class SessionManager {
+
+    // This variable remembers the currently logged-in user.
+    // 'static' means there is only ONE memory for the whole application.
+    private static User currentUser = null;
+
+    // We make the constructor private so nobody can create an object of SessionManager.
+    // We only want to use its methods directly.
+    private SessionManager() {
+    }
+
+    // Called when a user successfully logs in
+    public static void login(User user) {
+        currentUser = user;
+    }
+
+    // Called when the user chooses to log out
+    public static void logout() {
+        currentUser = null;
+    }
+
+    // Used to get the details of the user who is currently logged in
+    public static User getCurrentUser() {
+        return currentUser;
+    }
+
+    // A quick way to check if ANY user is currently logged in
+    public static boolean isLoggedIn() {
+        if (currentUser != null) {
+            return true; // Someone is logged in
+        } else {
+            return false; // No one is logged in
+        }
+    }
+}
+
+
+========== FILE: Validator.java ==========
+
+package com.skillbridge.util;
+
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
+
+public class Validator {
+
+    private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@(.+)$";
+    private static final String PHONE_PATTERN = "^[0-9]{10}$";
+
+    private Validator() {
+    }
+
+    public static boolean isValidEmail(String email) {
+        if (email == null || email.trim().isEmpty()) return false;
+        return email.matches(EMAIL_PATTERN);
+    }
+
+    public static boolean isValidPassword(String password) {
+        if (password == null) return false;
+        return password.length() >= 6;
+    }
+
+    public static boolean isValidPhone(String phoneNumber) {
+        if (phoneNumber == null || phoneNumber.trim().isEmpty()) return false;
+        return phoneNumber.matches(PHONE_PATTERN);
+    }
+
+    public static boolean isValidEnrollmentNo(String enrollmentNumber) {
+        if (enrollmentNumber == null || enrollmentNumber.trim().isEmpty()) return false;
+        return enrollmentNumber.length() >= 5;
+    }
+
+    public static boolean isFutureDate(LocalDate sessionDate) {
+        if (sessionDate == null) return false;
+        return !sessionDate.isBefore(LocalDate.now());
+    }
+
+    public static boolean isValidTimeRange(LocalTime startTime, LocalTime endTime) {
+        if (startTime == null || endTime == null) return false;
+        return startTime.isBefore(endTime);
+    }
+
+    public static boolean isEmptyText(String text) {
+        return text == null || text.trim().isEmpty();
+    }
+
+    public static int safeParseInt(String input) {
+        if (input == null || input.trim().isEmpty()) return -1;
+        try {
+            return Integer.parseInt(input.trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    public static LocalDate safeParseDate(String input) {
+        if (input == null || input.trim().isEmpty()) return null;
+        try {
+            return LocalDate.parse(input.trim());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    public static LocalTime safeParseTime(String input) {
+        if (input == null || input.trim().isEmpty()) return null;
+        try {
+            return LocalTime.parse(input.trim());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    public static boolean isValidRating(int rating) {
+        return rating >= 1 && rating <= 5;
+    }
+
+    public static boolean isValidSemester(int semester) {
+        return semester >= 1 && semester <= 8;
+    }
+}

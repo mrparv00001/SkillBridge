@@ -13,6 +13,9 @@ import com.skillbridge.service.UserSkillService;
 import com.skillbridge.service.LeaderboardService;
 import java.util.List;
 import java.util.Scanner;
+import com.skillbridge.model.ExchangeRequest;
+import com.skillbridge.service.ExchangeRequestService;
+import java.util.Stack;
 
 public class DashboardMenu {
 
@@ -25,6 +28,7 @@ public class DashboardMenu {
     private SessionMenu sessionMenu;
     private ExchangeRequestMenu requestMenu;
     private FeedbackMenu feedbackMenu;
+    private ExchangeRequestService exchangeRequestService;
 
     public DashboardMenu() {
         this.scanner = new Scanner(System.in);
@@ -36,6 +40,7 @@ public class DashboardMenu {
         this.sessionMenu = new SessionMenu();
         this.requestMenu = new ExchangeRequestMenu();
         this.feedbackMenu = new FeedbackMenu();
+        this.exchangeRequestService = new ExchangeRequestService();
     }
 
     public void showDashboard() {
@@ -44,6 +49,8 @@ public class DashboardMenu {
         while (loggedIn && SessionManager.isLoggedIn()) {
             User currentUser = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
             SessionManager.login(currentUser);
+
+            showNotificationPanel(currentUser.getUserId());
 
             System.out.println("\n=================================");
             System.out.println("   DASHBOARD - " + currentUser.getFullName().toUpperCase());
@@ -82,8 +89,20 @@ public class DashboardMenu {
     private void viewProfile() {
         System.out.println("\n--- MY PROFILE ---");
         User user = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
-        System.out.println(user.toString());
 
+        // Display profile line-by-line (clean format)
+        System.out.println("User ID         : " + user.getUserId());
+        System.out.println("Name            : " + user.getFullName());
+        System.out.println("Enrollment No   : " + user.getEnrollmentNo());
+        System.out.println("Department      : " + user.getDepartment());
+        System.out.println("Semester        : " + user.getSemester());
+        System.out.println("Email           : " + user.getEmail());
+        System.out.println("Phone           : " + user.getPhone());
+        System.out.println("Bio             : " + user.getBio());
+        System.out.println("Credits         : " + user.getCredits());
+        System.out.println("Status          : " + (user.isActive() ? "Active" : "Inactive"));
+
+        // Display skills
         System.out.println("\n--- MY SKILLS ---");
         UserSkillService userSkillService = new UserSkillService();
         SkillService skillService = new SkillService();
@@ -91,12 +110,13 @@ public class DashboardMenu {
         List<UserSkill> mySkills = userSkillService.getUserSkills(user.getUserId());
 
         if (mySkills == null || mySkills.isEmpty()) {
-            System.out.println("ℹ️ No skills added yet. Go to Skill Menu to add skills!");
+            System.out.println("No skills added yet. Go to Skill Menu to add skills!");
         } else {
             List<Skill> allSkills = skillService.getAllSkills();
             System.out.println("Total Skills: " + mySkills.size());
             System.out.println("---------------------------------");
 
+            int count = 1;
             for (UserSkill us : mySkills) {
                 String skillName = "Unknown";
                 if (allSkills != null) {
@@ -107,9 +127,10 @@ public class DashboardMenu {
                         }
                     }
                 }
-                System.out.println("• " + skillName +
-                        " | Type: " + us.getSkillType() +
-                        " | Level: " + us.getSkillLevel());
+                System.out.println(count + ". " + skillName);
+                System.out.println("   Type  : " + us.getSkillType());
+                System.out.println("   Level : " + us.getSkillLevel());
+                count++;
             }
         }
     }
@@ -152,5 +173,61 @@ public class DashboardMenu {
         if (!bio.trim().isEmpty()) currentUser.setBio(bio);
 
         userService.updateUserProfile(currentUser);
+    }
+
+    /**
+     * Notification Panel using STACK Data Structure (LIFO)
+     * Latest activity shows on top - Like WhatsApp notifications
+     */
+    private void showNotificationPanel(int userId) {
+        Stack<ExchangeRequest> notificationStack = exchangeRequestService.getRequestNotificationsStack(userId);
+
+        if (notificationStack.isEmpty()) {
+            return; // No notifications - silent skip
+        }
+
+        System.out.println("\n╔══════════════════════════════════════════════╗");
+        System.out.println("║        RECENT NOTIFICATIONS (LATEST FIRST)   ║");
+        System.out.println("╚══════════════════════════════════════════════╝");
+
+        int count = 0;
+        int maxShow = 5;
+
+        while (!notificationStack.isEmpty() && count < maxShow) {
+            ExchangeRequest req = notificationStack.pop(); // LIFO
+            String message = "";
+            String status = req.getStatus();
+
+            if (req.getSenderId() == userId) {
+                // I sent this request
+                if (status.equalsIgnoreCase("Pending")) {
+                    message = "You sent a request to User " + req.getReceiverId() + " (Pending)";
+                } else if (status.equalsIgnoreCase("Accepted")) {
+                    message = "User " + req.getReceiverId() + " ACCEPTED your request!";
+                } else if (status.equalsIgnoreCase("Rejected")) {
+                    message = "User " + req.getReceiverId() + " rejected your request";
+                } else if (status.equalsIgnoreCase("Cancelled")) {
+                    message = "You cancelled request to User " + req.getReceiverId();
+                }
+            } else {
+                // I received this request
+                if (status.equalsIgnoreCase("Pending")) {
+                    message = "User " + req.getSenderId() + " sent you a NEW request (Action Required!)";
+                } else if (status.equalsIgnoreCase("Accepted")) {
+                    message = "You accepted User " + req.getSenderId() + "'s request";
+                } else if (status.equalsIgnoreCase("Rejected")) {
+                    message = "You rejected User " + req.getSenderId() + "'s request";
+                }
+            }
+
+            System.out.println((count + 1) + ". " + message);
+            System.out.println("   Date: " + req.getRequestDate());
+            count++;
+        }
+
+        if (!notificationStack.isEmpty()) {
+            System.out.println("   ... and " + notificationStack.size() + " more (Check Exchange Requests menu)");
+        }
+        System.out.println("-----------------------------------------------\n");
     }
 }

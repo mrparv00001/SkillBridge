@@ -94,30 +94,47 @@ public class SkillMenu {
 
         System.out.print("Enter Skill ID: ");
         int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("❌ Invalid Skill ID."); return; }
+        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
 
-        System.out.print("Skill Type (Teaching/Learning): ");
-        String type = scanner.nextLine().trim();
-        type = type.substring(0, 1).toUpperCase() + type.substring(1).toLowerCase();
+        // Skill Type Selection (Number-based)
+        System.out.println("\nSelect Skill Type:");
+        System.out.println("  1. Teaching");
+        System.out.println("  2. Learning");
+        System.out.print("Choose (1 or 2): ");
+        int typeChoice = Validator.safeParseInt(scanner.nextLine());
 
-        if (!type.equalsIgnoreCase("Teaching") && !type.equalsIgnoreCase("Learning")) {
-            System.out.println("❌ Invalid skill type. Must be Teaching or Learning.");
+        String type;
+        if (typeChoice == 1) {
+            type = "Teaching";
+        } else if (typeChoice == 2) {
+            type = "Learning";
+        } else {
+            System.out.println("Invalid choice. Please select 1 or 2.");
             return;
         }
 
-        System.out.print("Skill Level (Beginner/Intermediate/Advanced): ");
-        String level = scanner.nextLine().trim();
-        level = level.substring(0, 1).toUpperCase() + level.substring(1).toLowerCase();
+        // Skill Level Selection (Number-based)
+        System.out.println("\nSelect Skill Level:");
+        System.out.println("  1. Beginner");
+        System.out.println("  2. Intermediate");
+        System.out.println("  3. Advanced");
+        System.out.print("Choose (1, 2, or 3): ");
+        int levelChoice = Validator.safeParseInt(scanner.nextLine());
 
-        if (!level.equalsIgnoreCase("Beginner")
-                && !level.equalsIgnoreCase("Intermediate")
-                && !level.equalsIgnoreCase("Advanced")) {
-            System.out.println("❌ Invalid skill level.");
+        String level;
+        if (levelChoice == 1) {
+            level = "Beginner";
+        } else if (levelChoice == 2) {
+            level = "Intermediate";
+        } else if (levelChoice == 3) {
+            level = "Advanced";
+        } else {
+            System.out.println("Invalid choice. Please select 1, 2, or 3.");
             return;
         }
 
         if (userSkillService.addSkillToUser(currentUserId, skillId, type, level)) {
-            System.out.println("✅ Skill added!");
+            System.out.println("Skill added to your profile!");
         }
     }
 
