@@ -116,25 +116,27 @@ public class ExchangeRequestMenu {
         int currentUserId = SessionManager.getCurrentUser().getUserId();
         System.out.println("\n--- MY REQUESTS ---");
 
-        // QUEUE - Pending requests in FIFO order (First come first serve)
         java.util.Queue<ExchangeRequest> pendingQueue = requestService.getPendingRequestsQueue(currentUserId);
 
         if (!pendingQueue.isEmpty()) {
             System.out.println("\n### PENDING REQUESTS (First Come First Serve) ###");
+            System.out.printf("%-6s %-10s %-10s %-8s %-20s%n",
+                    "ReqID", "From User", "Skill ID", "Type", "Received");
+            System.out.println("--------------------------------------------------------");
             int priority = 1;
             while (!pendingQueue.isEmpty()) {
                 ExchangeRequest req = pendingQueue.poll();
-                System.out.println("Priority " + priority + " | Request ID: " + req.getRequestId() +
-                        " | From User: " + req.getSenderId() +
-                        " | Skill ID: " + req.getRequestedSkillId() +
-                        " | Type: " + req.getExchangeType() +
-                        " | Received: " + req.getRequestDate());
+                System.out.printf("%-6d %-10d %-10d %-8s %-20s%n",
+                        req.getRequestId(),
+                        req.getSenderId(),
+                        req.getRequestedSkillId(),
+                        req.getExchangeType(),
+                        req.getRequestDate());
                 priority++;
             }
-            System.out.println("Accept in order for fairness!\n");
+            System.out.println("--------------------------------------------------------\n");
         }
 
-        // Show request history (Accepted/Rejected/Cancelled)
         List<ExchangeRequest> allRequests = requestService.getUserRequestHistory(currentUserId);
         boolean hasHistory = false;
 
@@ -142,15 +144,23 @@ public class ExchangeRequestMenu {
             if (!"Pending".equalsIgnoreCase(req.getStatus())) {
                 if (!hasHistory) {
                     System.out.println("### REQUEST HISTORY ###");
+                    System.out.printf("%-6s %-8s %-10s %-10s %-8s %-12s%n",
+                            "ReqID", "Sender", "Receiver", "Skill ID", "Type", "Status");
+                    System.out.println("------------------------------------------------------------");
                     hasHistory = true;
                 }
-                System.out.println("Request ID: " + req.getRequestId() +
-                        " | Sender: " + req.getSenderId() +
-                        " | Receiver: " + req.getReceiverId() +
-                        " | Skill: " + req.getRequestedSkillId() +
-                        " | Type: " + req.getExchangeType() +
-                        " | Status: " + req.getStatus());
+                System.out.printf("%-6d %-8d %-10d %-10d %-8s %-12s%n",
+                        req.getRequestId(),
+                        req.getSenderId(),
+                        req.getReceiverId(),
+                        req.getRequestedSkillId(),
+                        req.getExchangeType(),
+                        req.getStatus());
             }
+        }
+
+        if (hasHistory) {
+            System.out.println("------------------------------------------------------------");
         }
 
         if (pendingQueue.isEmpty() && !hasHistory) {

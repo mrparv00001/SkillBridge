@@ -192,7 +192,9 @@ public class DashboardMenu {
         } else {
             List<Skill> allSkills = skillService.getAllSkills();
             System.out.println("Total Skills: " + mySkills.size());
-            System.out.println("---------------------------------");
+            System.out.printf("%-4s %-22s %-12s %-12s%n",
+                    "No", "Skill Name", "Type", "Level");
+            System.out.println("--------------------------------------------------");
             int count = 1;
             for (UserSkill us : mySkills) {
                 String skillName = "Unknown";
@@ -204,11 +206,11 @@ public class DashboardMenu {
                         }
                     }
                 }
-                System.out.println(count + ". " + skillName);
-                System.out.println("   Type  : " + us.getSkillType());
-                System.out.println("   Level : " + us.getSkillLevel());
+                System.out.printf("%-4d %-22s %-12s %-12s%n",
+                        count, skillName, us.getSkillType(), us.getSkillLevel());
                 count++;
             }
+            System.out.println("--------------------------------------------------");
         }
     }
 

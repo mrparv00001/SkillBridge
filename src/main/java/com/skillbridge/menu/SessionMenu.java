@@ -143,23 +143,21 @@ public class SessionMenu {
         List<LearningSession> sessions = sessionService.getUserSessionHistory(myId);
 
         if (sessions == null || sessions.isEmpty()) {
-            System.out.println("ℹ️ No sessions yet.");
+            System.out.println("No sessions yet.");
         } else {
-            int count = 1;
+            System.out.printf("%-6s %-12s %-8s %-8s %-10s %-12s%n",
+                    "SesID", "Date", "Start", "End", "Mode", "Status");
+            System.out.println("--------------------------------------------------------------");
             for (LearningSession session : sessions) {
-                System.out.println("\n--- Session " + count + " ---");
-                System.out.println("Session ID  : " + session.getSessionId());
-                System.out.println("Date        : " + session.getSessionDate());
-                System.out.println("Time        : " + session.getStartTime() + " to " + session.getEndTime());
-                System.out.println("Mode        : " + session.getMode());
-                System.out.println("Status      : " + session.getStatus());
-                if (session.getMode().equalsIgnoreCase("Online")) {
-                    System.out.println("Meeting Link: " + session.getMeetingLink());
-                } else {
-                    System.out.println("Location    : " + session.getLocation());
-                }
-                count++;
+                System.out.printf("%-6d %-12s %-8s %-8s %-10s %-12s%n",
+                        session.getSessionId(),
+                        session.getSessionDate(),
+                        session.getStartTime(),
+                        session.getEndTime(),
+                        session.getMode(),
+                        session.getStatus());
             }
+            System.out.println("--------------------------------------------------------------");
         }
     }
 

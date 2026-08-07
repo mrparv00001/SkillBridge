@@ -52,49 +52,17 @@ public class SearchService {
      * Search Students by Department using BST.
      * Users are fetched from DB, inserted into BST, then traversed sorted.
      */
-    public List<User> searchStudentsByDepartment(String department, int skillId) {
-        root = null; // Reset BST
+    public List<User> searchStudentsByDepartment(String department) {
+        root = null;
         List<User> sortedUsers = new ArrayList<>();
 
-        String sql = "SELECT u.* FROM Users u " +
+        String sql = "SELECT DISTINCT u.* FROM Users u " +
                 "JOIN UserSkills us ON u.user_id = us.user_id " +
-                "WHERE u.department = ? AND us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
+                "WHERE u.department = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
 
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, department);
-            stmt.setInt(2, skillId);
-            ResultSet rs = stmt.executeQuery();
-
-            while (rs.next()) {
-                User user = mapResultSetToUser(rs);
-                root = insertBST(root, user); // Insert into BST
-            }
-
-            inOrderTraversal(root, sortedUsers); // Get sorted result
-
-        } catch (SQLException e) {
-            System.err.println("Error searching students by department: " + e.getMessage());
-        }
-
-        return sortedUsers;
-    }
-
-    /**
-     * Search Students by Semester using BST.
-     */
-    public List<User> searchStudentsBySemester(int semester, int skillId) {
-        root = null; // Reset BST
-        List<User> sortedUsers = new ArrayList<>();
-
-        String sql = "SELECT u.* FROM Users u " +
-                "JOIN UserSkills us ON u.user_id = us.user_id " +
-                "WHERE u.semester = ? AND us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
-
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setInt(1, semester);
-            stmt.setInt(2, skillId);
             ResultSet rs = stmt.executeQuery();
 
             while (rs.next()) {
@@ -105,7 +73,34 @@ public class SearchService {
             inOrderTraversal(root, sortedUsers);
 
         } catch (SQLException e) {
-            System.err.println("Error searching students by semester: " + e.getMessage());
+            System.err.println("Error searching by department: " + e.getMessage());
+        }
+
+        return sortedUsers;
+    }
+
+    public List<User> searchStudentsBySemester(int semester) {
+        root = null;
+        List<User> sortedUsers = new ArrayList<>();
+
+        String sql = "SELECT DISTINCT u.* FROM Users u " +
+                "JOIN UserSkills us ON u.user_id = us.user_id " +
+                "WHERE u.semester = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, semester);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                User user = mapResultSetToUser(rs);
+                root = insertBST(root, user);
+            }
+
+            inOrderTraversal(root, sortedUsers);
+
+        } catch (SQLException e) {
+            System.err.println("Error searching by semester: " + e.getMessage());
         }
 
         return sortedUsers;
