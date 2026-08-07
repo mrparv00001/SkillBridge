@@ -63,9 +63,16 @@ public class SkillMenu {
         System.out.println("\n--- ALL PLATFORM SKILLS ---");
         List<Skill> skills = skillService.getAllSkills();
         if (skills != null && !skills.isEmpty()) {
+            System.out.printf("%-4s %-22s %-15s%n",
+                    "ID", "Skill Name", "Category");
+            System.out.println("------------------------------------------");
             for (Skill skill : skills) {
-                System.out.println("ID: " + skill.getSkillId() + " | Name: " + skill.getSkillName() + " | Category: " + skill.getCategory());
+                System.out.printf("%-4d %-22s %-15s%n",
+                        skill.getSkillId(),
+                        skill.getSkillName(),
+                        skill.getCategory());
             }
+            System.out.println("------------------------------------------");
         }
     }
 
@@ -139,33 +146,55 @@ public class SkillMenu {
     }
 
     private void handleSearchByDepartment() {
-        System.out.println("\n--- SEARCH BY DEPARTMENT ---");
-        System.out.print("Enter Skill ID: ");
-        int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("❌ Invalid Skill ID."); return; }
-
+        System.out.println("\n--- SEARCH TEACHERS BY DEPARTMENT ---");
         System.out.print("Enter Department: ");
         String dept = scanner.nextLine();
 
-        List<User> results = searchService.searchStudentsByDepartment(dept, skillId);
-        printSearchResults(results);
+        List<User> results = searchService.searchStudentsByDepartment(dept);
+
+        if (results == null || results.isEmpty()) {
+            System.out.println("No teachers found in " + dept);
+        } else {
+            System.out.println("\n--- TEACHERS IN " + dept.toUpperCase() + " ---");
+            System.out.printf("%-4s %-22s %-4s %-10s%n", "ID", "Name", "Sem", "Credits");
+            System.out.println("--------------------------------------------");
+            for (User teacher : results) {
+                System.out.printf("%-4d %-22s %-4d %-10d%n",
+                        teacher.getUserId(),
+                        teacher.getFullName(),
+                        teacher.getSemester(),
+                        teacher.getCredits());
+            }
+            System.out.println("--------------------------------------------");
+        }
     }
 
     private void handleSearchBySemester() {
-        System.out.println("\n--- SEARCH BY SEMESTER ---");
-        System.out.print("Enter Skill ID: ");
-        int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("❌ Invalid Skill ID."); return; }
-
+        System.out.println("\n--- SEARCH TEACHERS BY SEMESTER ---");
         System.out.print("Enter Semester (1-8): ");
         int sem = Validator.safeParseInt(scanner.nextLine());
         if (!Validator.isValidSemester(sem)) {
-            System.out.println("❌ Invalid Semester. Must be between 1 and 8.");
+            System.out.println("Invalid Semester. Must be between 1 and 8.");
             return;
         }
 
-        List<User> results = searchService.searchStudentsBySemester(sem, skillId);
-        printSearchResults(results);
+        List<User> results = searchService.searchStudentsBySemester(sem);
+
+        if (results == null || results.isEmpty()) {
+            System.out.println("No teachers found in Semester " + sem);
+        } else {
+            System.out.println("\n--- TEACHERS IN SEMESTER " + sem + " ---");
+            System.out.printf("%-4s %-22s %-18s %-10s%n", "ID", "Name", "Department", "Credits");
+            System.out.println("------------------------------------------------------");
+            for (User teacher : results) {
+                System.out.printf("%-4d %-22s %-18s %-10d%n",
+                        teacher.getUserId(),
+                        teacher.getFullName(),
+                        teacher.getDepartment(),
+                        teacher.getCredits());
+            }
+            System.out.println("------------------------------------------------------");
+        }
     }
 
     private void handleGetRecommendations() {
@@ -173,24 +202,40 @@ public class SkillMenu {
         System.out.println("\n--- SMART RECOMMENDATIONS ---");
         System.out.print("Enter Skill ID: ");
         int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("❌ Invalid Skill ID."); return; }
+        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
 
         List<User> recommendations = recommendationService.getRecommendedTeachers(currentUserId, skillId);
         if (recommendations != null && !recommendations.isEmpty()) {
             System.out.println("\n--- TOP MATCHES ---");
+            System.out.printf("%-4s %-22s %-18s %-4s%n",
+                    "ID", "Name", "Department", "Sem");
+            System.out.println("--------------------------------------------------");
             for (User teacher : recommendations) {
-                System.out.println("User ID: " + teacher.getUserId() + " | " + teacher.getFullName() + " | " + teacher.getDepartment() + " | Sem: " + teacher.getSemester());
+                System.out.printf("%-4d %-22s %-18s %-4d%n",
+                        teacher.getUserId(),
+                        teacher.getFullName(),
+                        teacher.getDepartment(),
+                        teacher.getSemester());
             }
+            System.out.println("--------------------------------------------------");
         }
     }
 
     private void printSearchResults(List<User> results) {
         if (results == null || results.isEmpty()) {
-            System.out.println("ℹ️ No teachers found.");
+            System.out.println("No teachers found.");
         } else {
+            System.out.printf("%-4s %-22s %-18s %-4s%n",
+                    "ID", "Name", "Department", "Sem");
+            System.out.println("--------------------------------------------------");
             for (User teacher : results) {
-                System.out.println("User ID: " + teacher.getUserId() + " | " + teacher.getFullName() + " | " + teacher.getDepartment() + " | Sem: " + teacher.getSemester());
+                System.out.printf("%-4d %-22s %-18s %-4d%n",
+                        teacher.getUserId(),
+                        teacher.getFullName(),
+                        teacher.getDepartment(),
+                        teacher.getSemester());
             }
+            System.out.println("--------------------------------------------------");
         }
     }
 }

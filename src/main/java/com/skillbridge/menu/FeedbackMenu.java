@@ -107,18 +107,20 @@ public class FeedbackMenu {
         List<Feedback> feedbackList = feedbackService.getFeedbackForUser(currentUserId);
 
         if (feedbackList != null && !feedbackList.isEmpty()) {
-            int count = 1;
+            System.out.printf("%-10s %-8s %-25s %-20s%n",
+                    "Session", "Rating", "Comment", "Date");
+            System.out.println("---------------------------------------------------------------------");
             for (Feedback fb : feedbackList) {
                 String comment = (fb.getComment() != null && !fb.getComment().trim().isEmpty())
-                        ? fb.getComment() : "No comment provided";
-
-                System.out.println("\n--- Feedback " + count + " ---");
-                System.out.println("Session ID  : " + fb.getSessionId());
-                System.out.println("Rating      : " + fb.getRating() + "/5");
-                System.out.println("Comment     : " + comment);
-                System.out.println("Date        : " + fb.getFeedbackDate());
-                count++;
+                        ? fb.getComment() : "No comment";
+                if (comment.length() > 22) comment = comment.substring(0, 22) + "...";
+                System.out.printf("%-10d %-8s %-25s %-20s%n",
+                        fb.getSessionId(),
+                        fb.getRating() + "/5",
+                        comment,
+                        fb.getFeedbackDate());
             }
+            System.out.println("---------------------------------------------------------------------");
         }
     }
 
