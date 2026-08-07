@@ -53,4 +53,32 @@ public class SkillDAO {
             return false;
         }
     }
+
+    public List<String> getTrendingSkills(int limit) {
+        List<String> trending = new ArrayList<>();
+        String sql = "SELECT s.skill_name, s.category, COUNT(ls.session_id) AS session_count " +
+                "FROM Skills s " +
+                "JOIN LearningSessions ls ON s.skill_id = ls.skill_id " +
+                "GROUP BY s.skill_id, s.skill_name, s.category " +
+                "ORDER BY session_count DESC " +
+                "LIMIT ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, limit);
+            ResultSet rs = stmt.executeQuery();
+            int rank = 1;
+            while (rs.next()) {
+                trending.add(String.format("%-6d %-25s %-10d %-15s",
+                        rank,
+                        rs.getString("skill_name"),
+                        rs.getInt("session_count"),
+                        rs.getString("category")));
+                rank++;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching trending skills: " + e.getMessage());
+        }
+        return trending;
+    }
 }
