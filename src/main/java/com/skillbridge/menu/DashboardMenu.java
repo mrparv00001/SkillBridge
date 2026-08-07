@@ -1,20 +1,21 @@
 package com.skillbridge.menu;
 
 import com.skillbridge.model.User;
-import com.skillbridge.service.AuthenticationService;
-import com.skillbridge.service.UserService;
-import com.skillbridge.util.SessionManager;
-import com.skillbridge.util.Validator;
-
+import com.skillbridge.model.Notification;
 import com.skillbridge.model.Skill;
 import com.skillbridge.model.UserSkill;
+import com.skillbridge.service.AuthenticationService;
+import com.skillbridge.service.UserService;
 import com.skillbridge.service.SkillService;
 import com.skillbridge.service.UserSkillService;
 import com.skillbridge.service.LeaderboardService;
+import com.skillbridge.service.NotificationService;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
-import com.skillbridge.model.ExchangeRequest;
-import com.skillbridge.service.ExchangeRequestService;
 import java.util.Stack;
 
 public class DashboardMenu {
@@ -23,24 +24,24 @@ public class DashboardMenu {
     private UserService userService;
     private AuthenticationService authService;
     private LeaderboardService leaderboardService;
+    private NotificationService notificationService;
 
     private SkillMenu skillMenu;
     private SessionMenu sessionMenu;
     private ExchangeRequestMenu requestMenu;
     private FeedbackMenu feedbackMenu;
-    private ExchangeRequestService exchangeRequestService;
 
     public DashboardMenu() {
         this.scanner = new Scanner(System.in);
         this.userService = new UserService();
         this.authService = new AuthenticationService();
         this.leaderboardService = new LeaderboardService();
+        this.notificationService = new NotificationService();
 
         this.skillMenu = new SkillMenu();
         this.sessionMenu = new SessionMenu();
         this.requestMenu = new ExchangeRequestMenu();
         this.feedbackMenu = new FeedbackMenu();
-        this.exchangeRequestService = new ExchangeRequestService();
     }
 
     public void showDashboard() {
@@ -52,9 +53,12 @@ public class DashboardMenu {
 
             showNotificationPanel(currentUser.getUserId());
 
+            int unreadCount = notificationService.getUnseenCount(currentUser.getUserId());
+            String badge = unreadCount > 0 ? " | Notifications: " + unreadCount + " NEW" : "";
+
             System.out.println("\n=================================");
             System.out.println("   DASHBOARD - " + currentUser.getFullName().toUpperCase());
-            System.out.println("   💳 Credits Available: " + currentUser.getCredits());
+            System.out.println("   Credits: " + currentUser.getCredits() + badge);
             System.out.println("=================================");
             System.out.println("1. View Profile");
             System.out.println("2. Update Profile");
@@ -81,16 +85,92 @@ public class DashboardMenu {
                     loggedIn = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please try again.");
+                    System.out.println("Invalid choice.");
             }
         }
+    }
+
+    private void showNotificationPanel(int userId) {
+        boolean viewing = true;
+
+        while (viewing) {
+            Stack<Notification> unseenStack = notificationService.getUnseenStack(userId);
+
+            if (unseenStack.isEmpty()) {
+                return;
+            }
+
+            List<Notification> displayList = new ArrayList<>();
+            System.out.println("\n===============================================");
+            System.out.println("   NOTIFICATIONS (" + unseenStack.size() + " unseen)");
+            System.out.println("===============================================");
+
+            int count = 1;
+            while (!unseenStack.isEmpty()) {
+                Notification notif = unseenStack.pop();
+                displayList.add(notif);
+                String timeAgo = getTimeAgo(notif.getCreatedAt());
+                System.out.println(count + ". " + notif.getMessage() + " - " + timeAgo);
+                System.out.println();
+                count++;
+            }
+
+            System.out.println("===============================================");
+            System.out.println("1. Mark specific as SEEN (Enter number)");
+            System.out.println("2. Mark ALL as SEEN");
+            System.out.println("3. Continue to Dashboard");
+            System.out.print("Choose: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1":
+                    System.out.print("Enter notification number: ");
+                    int num = Validator.safeParseInt(scanner.nextLine());
+                    if (num >= 1 && num <= displayList.size()) {
+                        Notification selected = displayList.get(num - 1);
+                        if (notificationService.markAsSeen(selected.getNotificationId())) {
+                            System.out.println("Notification #" + num + " removed.");
+                        }
+                    } else {
+                        System.out.println("Invalid number.");
+                    }
+                    break;
+
+                case "2":
+                    notificationService.markAllAsSeen(userId);
+                    System.out.println("All notifications cleared.");
+                    viewing = false;
+                    break;
+
+                case "3":
+                    viewing = false;
+                    break;
+
+                default:
+                    System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private String getTimeAgo(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) return "Unknown time";
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        long minutes = java.time.Duration.between(dateTime, now).toMinutes();
+        long hours = java.time.Duration.between(dateTime, now).toHours();
+        long days = java.time.Duration.between(dateTime, now).toDays();
+
+        if (minutes < 1) return "Just now";
+        if (minutes < 60) return minutes + " minutes ago";
+        if (hours < 24) return hours + " hours ago";
+        if (days < 7) return days + " days ago";
+        if (days < 30) return (days / 7) + " weeks ago";
+        return (days / 30) + " months ago";
     }
 
     private void viewProfile() {
         System.out.println("\n--- MY PROFILE ---");
         User user = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
-
-        // Display profile line-by-line (clean format)
         System.out.println("User ID         : " + user.getUserId());
         System.out.println("Name            : " + user.getFullName());
         System.out.println("Enrollment No   : " + user.getEnrollmentNo());
@@ -102,20 +182,17 @@ public class DashboardMenu {
         System.out.println("Credits         : " + user.getCredits());
         System.out.println("Status          : " + (user.isActive() ? "Active" : "Inactive"));
 
-        // Display skills
         System.out.println("\n--- MY SKILLS ---");
         UserSkillService userSkillService = new UserSkillService();
         SkillService skillService = new SkillService();
-
         List<UserSkill> mySkills = userSkillService.getUserSkills(user.getUserId());
 
         if (mySkills == null || mySkills.isEmpty()) {
-            System.out.println("No skills added yet. Go to Skill Menu to add skills!");
+            System.out.println("No skills added yet.");
         } else {
             List<Skill> allSkills = skillService.getAllSkills();
             System.out.println("Total Skills: " + mySkills.size());
             System.out.println("---------------------------------");
-
             int count = 1;
             for (UserSkill us : mySkills) {
                 String skillName = "Unknown";
@@ -154,7 +231,7 @@ public class DashboardMenu {
             if (Validator.isValidSemester(sem)) {
                 currentUser.setSemester(sem);
             } else {
-                System.out.println("❌ Invalid semester. Must be between 1 and 8. Skipping.");
+                System.out.println("Invalid semester. Skipping.");
             }
         }
 
@@ -164,7 +241,7 @@ public class DashboardMenu {
             if (Validator.isValidPhone(phone)) {
                 currentUser.setPhone(phone);
             } else {
-                System.out.println("❌ Invalid phone number. Skipping phone update.");
+                System.out.println("Invalid phone. Skipping.");
             }
         }
 
@@ -173,61 +250,5 @@ public class DashboardMenu {
         if (!bio.trim().isEmpty()) currentUser.setBio(bio);
 
         userService.updateUserProfile(currentUser);
-    }
-
-    /**
-     * Notification Panel using STACK Data Structure (LIFO)
-     * Latest activity shows on top - Like WhatsApp notifications
-     */
-    private void showNotificationPanel(int userId) {
-        Stack<ExchangeRequest> notificationStack = exchangeRequestService.getRequestNotificationsStack(userId);
-
-        if (notificationStack.isEmpty()) {
-            return; // No notifications - silent skip
-        }
-
-        System.out.println("\n╔══════════════════════════════════════════════╗");
-        System.out.println("║        RECENT NOTIFICATIONS (LATEST FIRST)   ║");
-        System.out.println("╚══════════════════════════════════════════════╝");
-
-        int count = 0;
-        int maxShow = 5;
-
-        while (!notificationStack.isEmpty() && count < maxShow) {
-            ExchangeRequest req = notificationStack.pop(); // LIFO
-            String message = "";
-            String status = req.getStatus();
-
-            if (req.getSenderId() == userId) {
-                // I sent this request
-                if (status.equalsIgnoreCase("Pending")) {
-                    message = "You sent a request to User " + req.getReceiverId() + " (Pending)";
-                } else if (status.equalsIgnoreCase("Accepted")) {
-                    message = "User " + req.getReceiverId() + " ACCEPTED your request!";
-                } else if (status.equalsIgnoreCase("Rejected")) {
-                    message = "User " + req.getReceiverId() + " rejected your request";
-                } else if (status.equalsIgnoreCase("Cancelled")) {
-                    message = "You cancelled request to User " + req.getReceiverId();
-                }
-            } else {
-                // I received this request
-                if (status.equalsIgnoreCase("Pending")) {
-                    message = "User " + req.getSenderId() + " sent you a NEW request (Action Required!)";
-                } else if (status.equalsIgnoreCase("Accepted")) {
-                    message = "You accepted User " + req.getSenderId() + "'s request";
-                } else if (status.equalsIgnoreCase("Rejected")) {
-                    message = "You rejected User " + req.getSenderId() + "'s request";
-                }
-            }
-
-            System.out.println((count + 1) + ". " + message);
-            System.out.println("   Date: " + req.getRequestDate());
-            count++;
-        }
-
-        if (!notificationStack.isEmpty()) {
-            System.out.println("   ... and " + notificationStack.size() + " more (Check Exchange Requests menu)");
-        }
-        System.out.println("-----------------------------------------------\n");
     }
 }

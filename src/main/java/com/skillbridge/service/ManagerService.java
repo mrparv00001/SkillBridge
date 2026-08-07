@@ -12,24 +12,20 @@ public class ManagerService {
     private final ManagerDAO managerDAO = new ManagerDAO();
 
     // Manager login
-    public Manager loginManager(String username, String password) {
-        if (username == null || password == null || username.trim().isEmpty()) {
-            System.out.println("Username and password cannot be empty.");
+    public Manager loginManager(String email, String password) {
+        if (email == null || password == null || email.trim().isEmpty()) {
             return null;
         }
 
-        Manager manager = managerDAO.getManagerByUsername(username.trim());
+        Manager manager = managerDAO.getManagerByEmail(email.toLowerCase().trim());
         if (manager == null) {
-            System.out.println("Manager not found.");
             return null;
         }
 
         String hashedInput = hashPassword(password);
         if (!manager.getPasswordHash().equals(hashedInput)) {
-            System.out.println("Incorrect password.");
             return null;
         }
-
 
         return manager;
     }
@@ -87,5 +83,9 @@ public class ManagerService {
 
     public boolean deductCredits(int userId, int amount) {
         return managerDAO.deductCredits(userId, amount);
+    }
+
+    public boolean activateUser(int userId) {
+        return managerDAO.activateUser(userId);
     }
 }

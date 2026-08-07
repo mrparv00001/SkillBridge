@@ -51,15 +51,48 @@ public class ExchangeRequestMenu {
         int currentUserId = SessionManager.getCurrentUser().getUserId();
         System.out.println("\n--- SEND NEW REQUEST ---");
 
-        System.out.print("Enter Receiver's User ID: ");
-        int receiverId = Validator.safeParseInt(scanner.nextLine());
-        if (receiverId == -1) { System.out.println("Invalid Receiver ID."); return; }
+        // Show available skills first
+        System.out.println("\n--- Available Skills ---");
+        com.skillbridge.service.SkillService skillService = new com.skillbridge.service.SkillService();
+        List<com.skillbridge.model.Skill> skills = skillService.getAllSkills();
+        if (skills == null || skills.isEmpty()) {
+            System.out.println("No skills available.");
+            return;
+        }
+        for (com.skillbridge.model.Skill skill : skills) {
+            System.out.println(skill.getSkillId() + ". " + skill.getSkillName() + " (" + skill.getCategory() + ")");
+        }
 
-        System.out.print("Enter Requested Skill ID: ");
+        System.out.print("\nSelect Skill Number: ");
         int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
+        if (skillId == -1) { System.out.println("Invalid Skill."); return; }
 
-        // Exchange Type Selection (Number-based)
+        // Show teachers for that skill
+        System.out.println("\n--- Teachers for this Skill ---");
+        com.skillbridge.service.SearchService searchService = new com.skillbridge.service.SearchService();
+        // Get all teachers by searching all departments
+        com.skillbridge.dao.UserSkillDAO userSkillDAO = new com.skillbridge.dao.UserSkillDAO();
+        List<com.skillbridge.model.UserSkill> teachers = userSkillDAO.findUsersBySkill(skillId, "Teaching");
+
+        if (teachers == null || teachers.isEmpty()) {
+            System.out.println("No teachers found for this skill.");
+            return;
+        }
+
+        com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+        for (com.skillbridge.model.UserSkill us : teachers) {
+            if (us.getUserId() != currentUserId) {
+                com.skillbridge.model.User teacher = userDAO.getUserById(us.getUserId());
+                if (teacher != null && teacher.isActive()) {
+                    System.out.println("ID: " + teacher.getUserId() + " | " + teacher.getFullName() + " | " + teacher.getDepartment() + " | Level: " + us.getSkillLevel());
+                }
+            }
+        }
+
+        System.out.print("\nSelect Teacher User ID from above: ");
+        int receiverId = Validator.safeParseInt(scanner.nextLine());
+        if (receiverId == -1) { System.out.println("Invalid ID."); return; }
+
         System.out.println("\nSelect Exchange Type:");
         System.out.println("  1. Direct (One-way learning - Credits deducted)");
         System.out.println("  2. Swap (Two-way exchange - No credits deducted)");
@@ -67,14 +100,9 @@ public class ExchangeRequestMenu {
         int typeChoice = Validator.safeParseInt(scanner.nextLine());
 
         String type;
-        if (typeChoice == 1) {
-            type = "Direct";
-        } else if (typeChoice == 2) {
-            type = "Swap";
-        } else {
-            System.out.println("Invalid choice. Please select 1 or 2.");
-            return;
-        }
+        if (typeChoice == 1) type = "Direct";
+        else if (typeChoice == 2) type = "Swap";
+        else { System.out.println("Invalid choice."); return; }
 
         System.out.print("Enter Message: ");
         String message = scanner.nextLine();

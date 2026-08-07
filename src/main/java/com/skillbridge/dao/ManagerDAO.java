@@ -203,4 +203,39 @@ public class ManagerDAO {
             return false;
         }
     }
+
+    public boolean activateUser(int userId) {
+        String sql = "UPDATE Users SET is_active = true WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error activating user: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public Manager getManagerByEmail(String email) {
+        String sql = "SELECT * FROM Managers WHERE email = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, email);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                Timestamp ts = rs.getTimestamp("created_at");
+                return new Manager(
+                        rs.getInt("manager_id"),
+                        rs.getString("username"),
+                        rs.getString("password_hash"),
+                        rs.getString("full_name"),
+                        rs.getString("email"),
+                        ts != null ? ts.toLocalDateTime() : null
+                );
+            }
+        } catch (SQLException e) {
+            System.err.println("Error finding manager by email: " + e.getMessage());
+        }
+        return null;
+    }
 }

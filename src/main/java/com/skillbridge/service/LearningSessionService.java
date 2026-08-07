@@ -20,6 +20,7 @@ public class LearningSessionService {
     private CreditService creditService;
     private UserDAO userDAO;
     private UserSkillDAO userSkillDAO;
+    private NotificationService notificationService;
 
     public LearningSessionService() {
         this.sessionDAO = new LearningSessionDAO();
@@ -27,12 +28,22 @@ public class LearningSessionService {
         this.creditService = new CreditService();
         this.userDAO = new UserDAO();
         this.userSkillDAO = new UserSkillDAO();
+        this.notificationService = new NotificationService();
     }
 
     public boolean scheduleSession(LearningSession session) {
         if (!Validator.isFutureDate(session.getSessionDate())) {
             System.out.println("Schedule failed: Date must be today or in the future.");
             return false;
+        }
+
+        if (session.getSessionDate().equals(java.time.LocalDate.now())) {
+            if (session.getStartTime().isBefore(java.time.LocalTime.now())) {
+                System.out.println("Schedule failed: Start time has already passed today.");
+                System.out.println("Current time: " + java.time.LocalTime.now().withSecond(0).withNano(0));
+                System.out.println("Your start time: " + session.getStartTime());
+                return false;
+            }
         }
 
         if (!Validator.isValidTimeRange(session.getStartTime(), session.getEndTime())) {
@@ -45,7 +56,6 @@ public class LearningSessionService {
             return false;
         }
 
-        // LinkedList Data Structure - Time clash check for teacher
         LinkedList<LearningSession> teacherSessions = new LinkedList<>(sessionDAO.getSessionsByUser(session.getTeacherId()));
         for (LearningSession existing : teacherSessions) {
             if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
@@ -59,7 +69,6 @@ public class LearningSessionService {
             }
         }
 
-        // LinkedList Data Structure - Time clash check for learner
         LinkedList<LearningSession> learnerSessions = new LinkedList<>(sessionDAO.getSessionsByUser(session.getLearnerId()));
         for (LearningSession existing : learnerSessions) {
             if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
@@ -73,7 +82,6 @@ public class LearningSessionService {
             }
         }
 
-        // Credit System - Process transaction
         ExchangeRequest request = requestDAO.getRequestById(session.getRequestId());
         boolean isSwap = request != null && "Swap".equalsIgnoreCase(request.getExchangeType());
 
@@ -90,8 +98,15 @@ public class LearningSessionService {
 
         boolean success = sessionDAO.scheduleSession(session);
 
-        // POP-UP NOTIFICATION
         if (success) {
+            // Real Notifications to both users
+            notificationService.sendNotification(session.getTeacherId(),
+                    "New session scheduled on " + session.getSessionDate() + " at " + session.getStartTime(),
+                    "SESSION_SCHEDULED");
+            notificationService.sendNotification(session.getLearnerId(),
+                    "Your session confirmed on " + session.getSessionDate() + " at " + session.getStartTime(),
+                    "SESSION_SCHEDULED");
+
             System.out.println("\n===========================================");
             System.out.println("|      SESSION SCHEDULED SUCCESSFULLY!    |");
             System.out.println("===========================================");
@@ -134,8 +149,15 @@ public class LearningSessionService {
 
         boolean success = sessionDAO.markSessionCompleted(sessionId);
 
-        // POP-UP NOTIFICATION
         if (success) {
+            // Real Notifications to both users
+            notificationService.sendNotification(session.getTeacherId(),
+                    "Session " + sessionId + " completed. Please submit feedback!",
+                    "SESSION_COMPLETED");
+            notificationService.sendNotification(session.getLearnerId(),
+                    "Session " + sessionId + " completed. Please submit feedback!",
+                    "SESSION_COMPLETED");
+
             System.out.println("\n===========================================");
             System.out.println("|      SESSION COMPLETED SUCCESSFULLY!    |");
             System.out.println("===========================================");
@@ -165,7 +187,6 @@ public class LearningSessionService {
             return false;
         }
 
-        // CANCELLATION POLICY - 2 HOUR RULE
         java.time.LocalDateTime sessionDateTime = java.time.LocalDateTime.of(
                 session.getSessionDate(),
                 session.getStartTime()
@@ -182,7 +203,6 @@ public class LearningSessionService {
         boolean wasCharged = request != null && "Direct".equalsIgnoreCase(request.getExchangeType());
         boolean eligibleForRefund = hoursUntilSession >= 2;
 
-        // Show cancellation policy
         System.out.println("\n===========================================");
         System.out.println("|    CANCELLATION POLICY NOTICE            |");
         System.out.println("===========================================");
@@ -201,20 +221,20 @@ public class LearningSessionService {
         }
         System.out.println("===========================================");
 
-        // Confirm cancellation
-        System.out.print("\nDo you still want to cancel? (yes/no): ");
+        System.out.println("\nDo you still want to cancel?");
+        System.out.println("1. Yes");
+        System.out.println("2. No");
+        System.out.print("Choose (1 or 2): ");
         java.util.Scanner sc = new java.util.Scanner(System.in);
-        String confirm = sc.nextLine();
+        int confirm = com.skillbridge.util.Validator.safeParseInt(sc.nextLine());
 
-        if (!confirm.equalsIgnoreCase("yes") && !confirm.equalsIgnoreCase("y")) {
+        if (confirm != 1) {
             System.out.println("Cancellation aborted.");
             return false;
         }
 
-        // Update database (Trigger will auto-fire!)
         boolean success = sessionDAO.updateSessionStatus(sessionId, "Cancelled");
 
-        // Apply refund only if eligible
         if (success && wasCharged && eligibleForRefund) {
             String tLevel = getTeacherSkillLevel(session.getTeacherId(), session.getSkillId());
             int refundAmount = getCostByLevel(tLevel);
@@ -231,27 +251,32 @@ public class LearningSessionService {
             System.out.println("No refund issued. Teacher keeps credits as compensation.");
         }
 
-        // Success message (Trigger handles notification automatically!)
         if (success) {
+            // Real Notifications to both users
+            notificationService.sendNotification(session.getTeacherId(),
+                    "Session " + sessionId + " has been cancelled. Date: " + session.getSessionDate(),
+                    "SESSION_CANCELLED");
+            notificationService.sendNotification(session.getLearnerId(),
+                    "Session " + sessionId + " has been cancelled. Date: " + session.getSessionDate(),
+                    "SESSION_CANCELLED");
+
             System.out.println("\n===========================================");
             System.out.println("|      SESSION CANCELLED SUCCESSFULLY!    |");
             System.out.println("===========================================");
             System.out.println("Session ID  : " + sessionId);
-            System.out.println("Both users notified via database trigger.");
+            System.out.println("Both users notified.");
             System.out.println("===========================================\n");
         }
 
         return success;
     }
 
-    // Helper method to get credit cost based on skill level
     private int getCostByLevel(String skillLevel) {
         if ("Advanced".equalsIgnoreCase(skillLevel)) return 10;
         if ("Intermediate".equalsIgnoreCase(skillLevel)) return 7;
         return 5;
     }
 
-    // Helper method to get teacher's skill level for a specific skill
     private String getTeacherSkillLevel(int teacherId, int skillId) {
         List<UserSkill> skills = userSkillDAO.getSkillsByUserId(teacherId);
         for (UserSkill s : skills) {

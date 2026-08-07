@@ -96,4 +96,19 @@ public class UserSkillDAO {
             return false;
         }
     }
+
+    public boolean updateSkillLevel(int userId, int skillId, String skillType, String newLevel) {
+        String sql = "UPDATE UserSkills SET skill_level = ? WHERE user_id = ? AND skill_id = ? AND skill_type = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, newLevel);
+            stmt.setInt(2, userId);
+            stmt.setInt(3, skillId);
+            stmt.setString(4, skillType);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating skill level: " + e.getMessage());
+            return false;
+        }
+    }
 }
