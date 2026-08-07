@@ -93,6 +93,20 @@ public class ExchangeRequestMenu {
         int receiverId = Validator.safeParseInt(scanner.nextLine());
         if (receiverId == -1) { System.out.println("Invalid ID."); return; }
 
+// Validate if selected user is actually a teacher for this skill
+        boolean validTeacher = false;
+        for (com.skillbridge.model.UserSkill us : teachers) {
+            if (us.getUserId() == receiverId) {
+                validTeacher = true;
+                break;
+            }
+        }
+
+        if (!validTeacher) {
+            System.out.println("Invalid selection. Please choose from the list above.");
+            return;
+        }
+
         System.out.println("\nSelect Exchange Type:");
         System.out.println("  1. Direct (One-way learning - Credits deducted)");
         System.out.println("  2. Swap (Two-way exchange - No credits deducted)");
@@ -116,54 +130,71 @@ public class ExchangeRequestMenu {
         int currentUserId = SessionManager.getCurrentUser().getUserId();
         System.out.println("\n--- MY REQUESTS ---");
 
-        java.util.Queue<ExchangeRequest> pendingQueue = requestService.getPendingRequestsQueue(currentUserId);
+        List<ExchangeRequest> allRequests = requestService.getUserRequestHistory(currentUserId);
 
-        if (!pendingQueue.isEmpty()) {
-            System.out.println("\n### PENDING REQUESTS (First Come First Serve) ###");
-            System.out.printf("%-6s %-10s %-10s %-8s %-20s%n",
-                    "ReqID", "From User", "Skill ID", "Type", "Received");
-            System.out.println("--------------------------------------------------------");
-            int priority = 1;
-            while (!pendingQueue.isEmpty()) {
-                ExchangeRequest req = pendingQueue.poll();
-                System.out.printf("%-6d %-10d %-10d %-8s %-20s%n",
+        // Section 1: ALL Pending Requests (Sent + Received merged)
+        boolean hasPending = false;
+        for (ExchangeRequest req : allRequests) {
+            if ("Pending".equalsIgnoreCase(req.getStatus())) {
+                if (!hasPending) {
+                    System.out.println("\n### PENDING REQUESTS ###");
+                    System.out.printf("%-6s %-8s %-15s %-10s %-8s %-20s%n",
+                            "ReqID", "Role", "With", "Skill ID", "Type", "Date");
+                    System.out.println("---------------------------------------------------------------------");
+                    hasPending = true;
+                }
+
+                String role;
+                int otherUserId;
+                if (req.getSenderId() == currentUserId) {
+                    role = "SENT";
+                    otherUserId = req.getReceiverId();
+                } else {
+                    role = "RECEIVED";
+                    otherUserId = req.getSenderId();
+                }
+
+                com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+                com.skillbridge.model.User otherUser = userDAO.getUserById(otherUserId);
+                String otherName = otherUser != null ? otherUser.getFullName() : "User " + otherUserId;
+
+                System.out.printf("%-6d %-8s %-15s %-10d %-8s %-20s%n",
                         req.getRequestId(),
-                        req.getSenderId(),
+                        role,
+                        otherName,
                         req.getRequestedSkillId(),
                         req.getExchangeType(),
                         req.getRequestDate());
-                priority++;
             }
-            System.out.println("--------------------------------------------------------\n");
         }
+        if (hasPending) System.out.println("---------------------------------------------------------------------\n");
 
-        List<ExchangeRequest> allRequests = requestService.getUserRequestHistory(currentUserId);
+        // Section 2: Request History (Accepted/Rejected/Cancelled)
         boolean hasHistory = false;
-
         for (ExchangeRequest req : allRequests) {
             if (!"Pending".equalsIgnoreCase(req.getStatus())) {
                 if (!hasHistory) {
                     System.out.println("### REQUEST HISTORY ###");
-                    System.out.printf("%-6s %-8s %-10s %-10s %-8s %-12s%n",
-                            "ReqID", "Sender", "Receiver", "Skill ID", "Type", "Status");
-                    System.out.println("------------------------------------------------------------");
+                    System.out.printf("%-6s %-15s %-10s %-8s %-12s%n",
+                            "ReqID", "With", "Skill ID", "Type", "Status");
+                    System.out.println("-------------------------------------------------------------");
                     hasHistory = true;
                 }
-                System.out.printf("%-6d %-8d %-10d %-10d %-8s %-12s%n",
+                int otherUserId = (req.getSenderId() == currentUserId) ? req.getReceiverId() : req.getSenderId();
+                com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+                com.skillbridge.model.User otherUser = userDAO.getUserById(otherUserId);
+                String otherName = otherUser != null ? otherUser.getFullName() : "User " + otherUserId;
+                System.out.printf("%-6d %-15s %-10d %-8s %-12s%n",
                         req.getRequestId(),
-                        req.getSenderId(),
-                        req.getReceiverId(),
+                        otherName,
                         req.getRequestedSkillId(),
                         req.getExchangeType(),
                         req.getStatus());
             }
         }
+        if (hasHistory) System.out.println("-------------------------------------------------------------");
 
-        if (hasHistory) {
-            System.out.println("------------------------------------------------------------");
-        }
-
-        if (pendingQueue.isEmpty() && !hasHistory) {
+        if (!hasPending && !hasHistory) {
             System.out.println("No requests yet.");
         }
     }

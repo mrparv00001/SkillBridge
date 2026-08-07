@@ -58,7 +58,7 @@ public class SearchService {
 
         String sql = "SELECT DISTINCT u.* FROM Users u " +
                 "JOIN UserSkills us ON u.user_id = us.user_id " +
-                "WHERE u.department = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
+                "WHERE u.department LIKE CONCAT('%', ?, '%') AND us.skill_type = 'Teaching' AND u.is_active = true";
 
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {

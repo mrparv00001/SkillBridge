@@ -58,18 +58,33 @@ public class SessionMenu {
         List<com.skillbridge.model.ExchangeRequest> allRequests = reqDAO.getRequestsByUserId(myId);
 
         boolean hasAccepted = false;
+        com.skillbridge.dao.LearningSessionDAO sessionCheckDAO = new com.skillbridge.dao.LearningSessionDAO();
+
         for (com.skillbridge.model.ExchangeRequest req : allRequests) {
             if ("Accepted".equalsIgnoreCase(req.getStatus())) {
-                if (!hasAccepted) {
-                    System.out.println("Req ID | Partner | Skill ID | Type");
-                    System.out.println("-------|---------|----------|-----");
-                    hasAccepted = true;
+                // Check if session already exists for this request
+                List<LearningSession> existingSessions = sessionCheckDAO.getSessionsByUser(myId);
+                boolean alreadyScheduled = false;
+                for (LearningSession ls : existingSessions) {
+                    if (ls.getRequestId() == req.getRequestId() &&
+                            (ls.getStatus().equalsIgnoreCase("Scheduled") || ls.getStatus().equalsIgnoreCase("Completed"))) {
+                        alreadyScheduled = true;
+                        break;
+                    }
                 }
-                int partnerId = (req.getSenderId() == myId) ? req.getReceiverId() : req.getSenderId();
-                com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
-                com.skillbridge.model.User partner = userDAO.getUserById(partnerId);
-                String partnerName = partner != null ? partner.getFullName() : "Unknown";
-                System.out.println(req.getRequestId() + "      | " + partnerName + " (ID:" + partnerId + ") | " + req.getRequestedSkillId() + "        | " + req.getExchangeType());
+
+                if (!alreadyScheduled) {
+                    if (!hasAccepted) {
+                        System.out.println("Req ID | Partner | Skill ID | Type");
+                        System.out.println("-------|---------|----------|-----");
+                        hasAccepted = true;
+                    }
+                    int partnerId = (req.getSenderId() == myId) ? req.getReceiverId() : req.getSenderId();
+                    com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+                    com.skillbridge.model.User partner = userDAO.getUserById(partnerId);
+                    String partnerName = partner != null ? partner.getFullName() : "Unknown";
+                    System.out.println(req.getRequestId() + "      | " + partnerName + " (ID:" + partnerId + ") | " + req.getRequestedSkillId() + "        | " + req.getExchangeType());
+                }
             }
         }
 
@@ -130,7 +145,22 @@ public class SessionMenu {
             location = scanner.nextLine();
         }
 
-        LearningSession session = new LearningSession(requestId, myId, partnerId, skillId, date, startTime, endTime, mode, link, location);
+        // Determine who is teacher and who is learner from the request
+
+        int teacherId;
+        int learnerId;
+
+        if (selectedReq.getSenderId() == myId) {
+            // I sent the request = I am the LEARNER
+            teacherId = partnerId;
+            learnerId = myId;
+        } else {
+            // I received the request = I am the TEACHER
+            teacherId = myId;
+            learnerId = partnerId;
+        }
+
+        LearningSession session = new LearningSession(requestId, teacherId, learnerId, skillId, date, startTime, endTime, mode, link, location);
 
         if (sessionService.scheduleSession(session)) {
             System.out.println("Session scheduled successfully!");
