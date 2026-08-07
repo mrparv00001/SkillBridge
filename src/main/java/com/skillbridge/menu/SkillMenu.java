@@ -40,8 +40,9 @@ public class SkillMenu {
             System.out.println("3. Add Skill to Profile");
             System.out.println("4. Search by Department");
             System.out.println("5. Search by Semester");
-            System.out.println("6. Get Smart Recommendations");
-            System.out.println("7. Back to Dashboard");
+            System.out.println("6. Get Smart match for session");
+            System.out.println("7. Trending Skills");
+            System.out.println("8. Back to Dashboard");
             System.out.print("Choose an option: ");
 
             String choice = scanner.nextLine();
@@ -53,7 +54,8 @@ public class SkillMenu {
                 case "4": handleSearchByDepartment(); break;
                 case "5": handleSearchBySemester(); break;
                 case "6": handleGetRecommendations(); break;
-                case "7": running = false; break;
+                case "7": handleTrendingSkills(); break;
+                case "8": running = false; break;
                 default: System.out.println("❌ Invalid choice.");
             }
         }
@@ -237,5 +239,24 @@ public class SkillMenu {
             }
             System.out.println("--------------------------------------------------");
         }
+    }
+
+    private void handleTrendingSkills() {
+        System.out.println("\n--- TRENDING SKILLS (Most Scheduled) ---");
+
+        List<String> trending = skillService.getTrendingSkills(5);
+
+        if (trending == null || trending.isEmpty()) {
+            System.out.println("No trending data yet.");
+            return;
+        }
+
+        System.out.printf("%-6s %-25s %-10s %-15s%n",
+                "Rank", "Skill Name", "Sessions", "Category");
+        System.out.println("--------------------------------------------------------");
+        for (String line : trending) {
+            System.out.println(line);
+        }
+        System.out.println("--------------------------------------------------------");
     }
 }

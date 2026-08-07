@@ -609,6 +609,29 @@ public class ManagerDAO {
             return false;
         }
     }
+
+    public Manager getManagerByEmail(String email) {
+        String sql = "SELECT * FROM Managers WHERE email = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, email);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                Timestamp ts = rs.getTimestamp("created_at");
+                return new Manager(
+                        rs.getInt("manager_id"),
+                        rs.getString("username"),
+                        rs.getString("password_hash"),
+                        rs.getString("full_name"),
+                        rs.getString("email"),
+                        ts != null ? ts.toLocalDateTime() : null
+                );
+            }
+        } catch (SQLException e) {
+            System.err.println("Error finding manager by email: " + e.getMessage());
+        }
+        return null;
+    }
 }
 
 
@@ -626,14 +649,13 @@ import java.util.List;
 public class NotificationDAO {
 
     public boolean createNotification(int userId, String message, String type) {
-        String sql = "{CALL sp_createNotification(?, ?, ?)}";
+        String sql = "INSERT INTO Notifications (user_id, message, notification_type, is_read) VALUES (?, ?, ?, false)";
         try (Connection conn = DBConnection.getConnection();
-             CallableStatement stmt = conn.prepareCall(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
             stmt.setString(2, message);
             stmt.setString(3, type);
-            stmt.execute();
-            return true;
+            return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("Error creating notification: " + e.getMessage());
             return false;
@@ -642,9 +664,9 @@ public class NotificationDAO {
 
     public List<Notification> getUnreadNotifications(int userId) {
         List<Notification> notifications = new ArrayList<>();
-        String sql = "{CALL sp_getUnreadNotifications(?)}";
+        String sql = "SELECT * FROM Notifications WHERE user_id = ? AND is_read = false ORDER BY created_at DESC";
         try (Connection conn = DBConnection.getConnection();
-             CallableStatement stmt = conn.prepareCall(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -657,12 +679,11 @@ public class NotificationDAO {
     }
 
     public boolean markAsRead(int notificationId) {
-        String sql = "{CALL sp_markNotificationRead(?)}";
+        String sql = "UPDATE Notifications SET is_read = true WHERE notification_id = ?";
         try (Connection conn = DBConnection.getConnection();
-             CallableStatement stmt = conn.prepareCall(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, notificationId);
-            stmt.execute();
-            return true;
+            return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("Error marking notification: " + e.getMessage());
             return false;
@@ -670,12 +691,11 @@ public class NotificationDAO {
     }
 
     public boolean markAllAsRead(int userId) {
-        String sql = "{CALL sp_markAllRead(?)}";
+        String sql = "UPDATE Notifications SET is_read = true WHERE user_id = ? AND is_read = false";
         try (Connection conn = DBConnection.getConnection();
-             CallableStatement stmt = conn.prepareCall(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
-            stmt.execute();
-            return true;
+            return stmt.executeUpdate() >= 0;
         } catch (SQLException e) {
             System.err.println("Error marking all: " + e.getMessage());
             return false;
@@ -684,9 +704,9 @@ public class NotificationDAO {
 
     public List<Notification> getSeenNotifications(int userId) {
         List<Notification> notifications = new ArrayList<>();
-        String sql = "{CALL sp_getSeenNotifications(?)}";
+        String sql = "SELECT * FROM Notifications WHERE user_id = ? AND is_read = true ORDER BY created_at DESC";
         try (Connection conn = DBConnection.getConnection();
-             CallableStatement stmt = conn.prepareCall(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -699,7 +719,7 @@ public class NotificationDAO {
     }
 
     public int getUnreadCount(int userId) {
-        String sql = "SELECT fn_getUnreadCount(?) AS unread_count";
+        String sql = "SELECT COUNT(*) AS unread_count FROM Notifications WHERE user_id = ? AND is_read = false";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
@@ -1040,6 +1060,21 @@ public class UserSkillDAO {
             return false;
         }
     }
+
+    public boolean updateSkillLevel(int userId, int skillId, String skillType, String newLevel) {
+        String sql = "UPDATE UserSkills SET skill_level = ? WHERE user_id = ? AND skill_id = ? AND skill_type = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, newLevel);
+            stmt.setInt(2, userId);
+            stmt.setInt(3, skillId);
+            stmt.setString(4, skillType);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating skill level: " + e.getMessage());
+            return false;
+        }
+    }
 }
 
 
@@ -1088,6 +1123,10 @@ public class DBConnection {
             System.err.println("State: " + e.getSQLState());
             throw e;
         }
+    }
+
+    public static boolean isLocalhost() {
+        return useLocalhost;
     }
 }
 
@@ -1288,7 +1327,9 @@ public class DashboardMenu {
         } else {
             List<Skill> allSkills = skillService.getAllSkills();
             System.out.println("Total Skills: " + mySkills.size());
-            System.out.println("---------------------------------");
+            System.out.printf("%-4s %-22s %-12s %-12s%n",
+                    "No", "Skill Name", "Type", "Level");
+            System.out.println("--------------------------------------------------");
             int count = 1;
             for (UserSkill us : mySkills) {
                 String skillName = "Unknown";
@@ -1300,11 +1341,11 @@ public class DashboardMenu {
                         }
                     }
                 }
-                System.out.println(count + ". " + skillName);
-                System.out.println("   Type  : " + us.getSkillType());
-                System.out.println("   Level : " + us.getSkillLevel());
+                System.out.printf("%-4d %-22s %-12s %-12s%n",
+                        count, skillName, us.getSkillType(), us.getSkillLevel());
                 count++;
             }
+            System.out.println("--------------------------------------------------");
         }
     }
 
@@ -1405,15 +1446,48 @@ public class ExchangeRequestMenu {
         int currentUserId = SessionManager.getCurrentUser().getUserId();
         System.out.println("\n--- SEND NEW REQUEST ---");
 
-        System.out.print("Enter Receiver's User ID: ");
-        int receiverId = Validator.safeParseInt(scanner.nextLine());
-        if (receiverId == -1) { System.out.println("Invalid Receiver ID."); return; }
+        // Show available skills first
+        System.out.println("\n--- Available Skills ---");
+        com.skillbridge.service.SkillService skillService = new com.skillbridge.service.SkillService();
+        List<com.skillbridge.model.Skill> skills = skillService.getAllSkills();
+        if (skills == null || skills.isEmpty()) {
+            System.out.println("No skills available.");
+            return;
+        }
+        for (com.skillbridge.model.Skill skill : skills) {
+            System.out.println(skill.getSkillId() + ". " + skill.getSkillName() + " (" + skill.getCategory() + ")");
+        }
 
-        System.out.print("Enter Requested Skill ID: ");
+        System.out.print("\nSelect Skill Number: ");
         int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
+        if (skillId == -1) { System.out.println("Invalid Skill."); return; }
 
-        // Exchange Type Selection (Number-based)
+        // Show teachers for that skill
+        System.out.println("\n--- Teachers for this Skill ---");
+        com.skillbridge.service.SearchService searchService = new com.skillbridge.service.SearchService();
+        // Get all teachers by searching all departments
+        com.skillbridge.dao.UserSkillDAO userSkillDAO = new com.skillbridge.dao.UserSkillDAO();
+        List<com.skillbridge.model.UserSkill> teachers = userSkillDAO.findUsersBySkill(skillId, "Teaching");
+
+        if (teachers == null || teachers.isEmpty()) {
+            System.out.println("No teachers found for this skill.");
+            return;
+        }
+
+        com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+        for (com.skillbridge.model.UserSkill us : teachers) {
+            if (us.getUserId() != currentUserId) {
+                com.skillbridge.model.User teacher = userDAO.getUserById(us.getUserId());
+                if (teacher != null && teacher.isActive()) {
+                    System.out.println("ID: " + teacher.getUserId() + " | " + teacher.getFullName() + " | " + teacher.getDepartment() + " | Level: " + us.getSkillLevel());
+                }
+            }
+        }
+
+        System.out.print("\nSelect Teacher User ID from above: ");
+        int receiverId = Validator.safeParseInt(scanner.nextLine());
+        if (receiverId == -1) { System.out.println("Invalid ID."); return; }
+
         System.out.println("\nSelect Exchange Type:");
         System.out.println("  1. Direct (One-way learning - Credits deducted)");
         System.out.println("  2. Swap (Two-way exchange - No credits deducted)");
@@ -1421,14 +1495,9 @@ public class ExchangeRequestMenu {
         int typeChoice = Validator.safeParseInt(scanner.nextLine());
 
         String type;
-        if (typeChoice == 1) {
-            type = "Direct";
-        } else if (typeChoice == 2) {
-            type = "Swap";
-        } else {
-            System.out.println("Invalid choice. Please select 1 or 2.");
-            return;
-        }
+        if (typeChoice == 1) type = "Direct";
+        else if (typeChoice == 2) type = "Swap";
+        else { System.out.println("Invalid choice."); return; }
 
         System.out.print("Enter Message: ");
         String message = scanner.nextLine();
@@ -1442,25 +1511,27 @@ public class ExchangeRequestMenu {
         int currentUserId = SessionManager.getCurrentUser().getUserId();
         System.out.println("\n--- MY REQUESTS ---");
 
-        // QUEUE - Pending requests in FIFO order (First come first serve)
         java.util.Queue<ExchangeRequest> pendingQueue = requestService.getPendingRequestsQueue(currentUserId);
 
         if (!pendingQueue.isEmpty()) {
             System.out.println("\n### PENDING REQUESTS (First Come First Serve) ###");
+            System.out.printf("%-6s %-10s %-10s %-8s %-20s%n",
+                    "ReqID", "From User", "Skill ID", "Type", "Received");
+            System.out.println("--------------------------------------------------------");
             int priority = 1;
             while (!pendingQueue.isEmpty()) {
                 ExchangeRequest req = pendingQueue.poll();
-                System.out.println("Priority " + priority + " | Request ID: " + req.getRequestId() +
-                        " | From User: " + req.getSenderId() +
-                        " | Skill ID: " + req.getRequestedSkillId() +
-                        " | Type: " + req.getExchangeType() +
-                        " | Received: " + req.getRequestDate());
+                System.out.printf("%-6d %-10d %-10d %-8s %-20s%n",
+                        req.getRequestId(),
+                        req.getSenderId(),
+                        req.getRequestedSkillId(),
+                        req.getExchangeType(),
+                        req.getRequestDate());
                 priority++;
             }
-            System.out.println("Accept in order for fairness!\n");
+            System.out.println("--------------------------------------------------------\n");
         }
 
-        // Show request history (Accepted/Rejected/Cancelled)
         List<ExchangeRequest> allRequests = requestService.getUserRequestHistory(currentUserId);
         boolean hasHistory = false;
 
@@ -1468,15 +1539,23 @@ public class ExchangeRequestMenu {
             if (!"Pending".equalsIgnoreCase(req.getStatus())) {
                 if (!hasHistory) {
                     System.out.println("### REQUEST HISTORY ###");
+                    System.out.printf("%-6s %-8s %-10s %-10s %-8s %-12s%n",
+                            "ReqID", "Sender", "Receiver", "Skill ID", "Type", "Status");
+                    System.out.println("------------------------------------------------------------");
                     hasHistory = true;
                 }
-                System.out.println("Request ID: " + req.getRequestId() +
-                        " | Sender: " + req.getSenderId() +
-                        " | Receiver: " + req.getReceiverId() +
-                        " | Skill: " + req.getRequestedSkillId() +
-                        " | Type: " + req.getExchangeType() +
-                        " | Status: " + req.getStatus());
+                System.out.printf("%-6d %-8d %-10d %-10d %-8s %-12s%n",
+                        req.getRequestId(),
+                        req.getSenderId(),
+                        req.getReceiverId(),
+                        req.getRequestedSkillId(),
+                        req.getExchangeType(),
+                        req.getStatus());
             }
+        }
+
+        if (hasHistory) {
+            System.out.println("------------------------------------------------------------");
         }
 
         if (pendingQueue.isEmpty() && !hasHistory) {
@@ -1570,13 +1649,47 @@ public class FeedbackMenu {
         int currentUserId = SessionManager.getCurrentUser().getUserId();
         System.out.println("\n--- SUBMIT FEEDBACK ---");
 
-        System.out.print("Enter Session ID: ");
+        // Show completed sessions
+        System.out.println("\n--- Your Completed Sessions ---");
+        com.skillbridge.dao.LearningSessionDAO sessionDAO = new com.skillbridge.dao.LearningSessionDAO();
+        List<com.skillbridge.model.LearningSession> sessions = sessionDAO.getSessionsByUser(currentUserId);
+
+        boolean hasCompleted = false;
+        for (com.skillbridge.model.LearningSession s : sessions) {
+            if ("Completed".equalsIgnoreCase(s.getStatus())) {
+                if (!hasCompleted) {
+                    System.out.println("Session ID | Date       | Partner");
+                    System.out.println("-----------|------------|--------");
+                    hasCompleted = true;
+                }
+                int partnerId = (s.getTeacherId() == currentUserId) ? s.getLearnerId() : s.getTeacherId();
+                com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+                com.skillbridge.model.User partner = userDAO.getUserById(partnerId);
+                String partnerName = partner != null ? partner.getFullName() : "Unknown";
+                System.out.println(s.getSessionId() + "          | " + s.getSessionDate() + " | " + partnerName + " (ID:" + partnerId + ")");
+            }
+        }
+
+        if (!hasCompleted) {
+            System.out.println("No completed sessions found.");
+            return;
+        }
+
+        System.out.print("\nSelect Session ID from above: ");
         int sessionId = Validator.safeParseInt(scanner.nextLine());
         if (sessionId == -1) { System.out.println("Invalid Session ID."); return; }
 
-        System.out.print("Enter Reviewed User's ID: ");
-        int reviewedId = Validator.safeParseInt(scanner.nextLine());
-        if (reviewedId == -1) { System.out.println("Invalid User ID."); return; }
+        // Auto-detect reviewed user
+        com.skillbridge.model.LearningSession selectedSession = sessionDAO.getSessionById(sessionId);
+        if (selectedSession == null || !"Completed".equalsIgnoreCase(selectedSession.getStatus())) {
+            System.out.println("Invalid session.");
+            return;
+        }
+
+        int reviewedId = (selectedSession.getTeacherId() == currentUserId) ? selectedSession.getLearnerId() : selectedSession.getTeacherId();
+        com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+        com.skillbridge.model.User reviewedUser = userDAO.getUserById(reviewedId);
+        System.out.println("Reviewing: " + (reviewedUser != null ? reviewedUser.getFullName() : "Unknown"));
 
         System.out.print("Enter Rating (1-5): ");
         int rating = Validator.safeParseInt(scanner.nextLine());
@@ -1596,18 +1709,20 @@ public class FeedbackMenu {
         List<Feedback> feedbackList = feedbackService.getFeedbackForUser(currentUserId);
 
         if (feedbackList != null && !feedbackList.isEmpty()) {
-            int count = 1;
+            System.out.printf("%-10s %-8s %-25s %-20s%n",
+                    "Session", "Rating", "Comment", "Date");
+            System.out.println("---------------------------------------------------------------------");
             for (Feedback fb : feedbackList) {
                 String comment = (fb.getComment() != null && !fb.getComment().trim().isEmpty())
-                        ? fb.getComment() : "No comment provided";
-
-                System.out.println("\n--- Feedback " + count + " ---");
-                System.out.println("Session ID  : " + fb.getSessionId());
-                System.out.println("Rating      : " + fb.getRating() + "/5");
-                System.out.println("Comment     : " + comment);
-                System.out.println("Date        : " + fb.getFeedbackDate());
-                count++;
+                        ? fb.getComment() : "No comment";
+                if (comment.length() > 22) comment = comment.substring(0, 22) + "...";
+                System.out.printf("%-10d %-8s %-25s %-20s%n",
+                        fb.getSessionId(),
+                        fb.getRating() + "/5",
+                        comment,
+                        fb.getFeedbackDate());
             }
+            System.out.println("---------------------------------------------------------------------");
         }
     }
 
@@ -1632,7 +1747,9 @@ public class FeedbackMenu {
 package com.skillbridge.menu;
 
 import com.skillbridge.model.User;
+import com.skillbridge.model.Manager;
 import com.skillbridge.service.AuthenticationService;
+import com.skillbridge.service.ManagerService;
 import com.skillbridge.util.Validator;
 
 import java.util.Scanner;
@@ -1641,12 +1758,14 @@ public class MainMenu {
 
     private Scanner scanner;
     private AuthenticationService authService;
+    private ManagerService managerService;
     private DashboardMenu dashboardMenu;
     private ManagerMenu managerMenu;
 
     public MainMenu() {
         this.scanner = new Scanner(System.in);
         this.authService = new AuthenticationService();
+        this.managerService = new ManagerService();
         this.dashboardMenu = new DashboardMenu();
         this.managerMenu = new ManagerMenu();
     }
@@ -1658,45 +1777,47 @@ public class MainMenu {
             System.out.println("\n=================================");
             System.out.println("   WELCOME TO SKILLBRIDGE");
             System.out.println("=================================");
-            System.out.println("1. Login (Student)");
-            System.out.println("2. Register (Student)");
-            System.out.println("3. Manager Portal");
-            System.out.println("4. Exit Application");
+            System.out.println("1. Login");
+            System.out.println("2. Register");
+            System.out.println("3. Exit");
             System.out.print("Choose an option: ");
 
             String choice = scanner.nextLine();
 
             switch (choice) {
                 case "1":
-                    handleLogin();
+                    handleSmartLogin();
                     break;
                 case "2":
                     handleRegister();
                     break;
                 case "3":
-                    managerMenu.start();
-                    break;
-                case "4":
-
                     running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please type 1, 2, 3, or 4.");
+                    System.out.println("Invalid choice.");
             }
         }
     }
 
-    private void handleLogin() {
-        System.out.println("\n--- STUDENT LOGIN ---");
+    private void handleSmartLogin() {
+        System.out.println("\n--- LOGIN ---");
         System.out.print("Enter Email: ");
         String email = scanner.nextLine();
 
         System.out.print("Enter Password: ");
         String password = scanner.nextLine();
 
-        boolean isSuccess = authService.login(email, password);
+        // First check Manager table
+        Manager manager = managerService.loginManager(email, password);
+        if (manager != null) {
+            managerMenu.showManagerDashboardDirect(manager);
+            return;
+        }
 
-        if (isSuccess) {
+        // Then check Student table
+        boolean isStudent = authService.login(email, password);
+        if (isStudent) {
             dashboardMenu.showDashboard();
         }
     }
@@ -1802,10 +1923,9 @@ public class ManagerMenu {
             System.out.println("4. View All Sessions");
             System.out.println("5. View All Feedback");
             System.out.println("6. View Leaderboard");
-            System.out.println("7. View Cancellation History");    // NEW
-            System.out.println("8. Activate / Deactivate User");              // NEW
-            System.out.println("9. Deduct User Credits");          // NEW
-            System.out.println("10. Logout");
+            System.out.println("7. View Cancellation History");
+            System.out.println("8. Activate / Deactivate User");
+            System.out.println("9. Logout");
             System.out.print("Choose an option: ");
 
             String choice = scanner.nextLine();
@@ -1817,10 +1937,9 @@ public class ManagerMenu {
                 case "4": viewAllSessions(); break;
                 case "5": viewAllFeedback(); break;
                 case "6": leaderboardService.displayLeaderboard(); break;
-                case "7": viewCancellationHistory(); break;    // NEW
-                case "8": deactivateUser(); break;             // NEW
-                case "9": deductUserCredits(); break;          // NEW
-                case "10": loggedIn = false; break;
+                case "7": viewCancellationHistory(); break;
+                case "8": deactivateUser(); break;
+                case "9": loggedIn = false; break;
                 default: System.out.println("Invalid choice.");
             }
         }
@@ -1836,17 +1955,21 @@ public class ManagerMenu {
         }
 
         System.out.println("Total Students: " + users.size());
-        System.out.println("-------------------------------------");
+        System.out.printf("%-4s %-22s %-12s %-18s %-4s %-8s %-8s%n",
+                "ID", "Name", "Enrollment", "Department", "Sem", "Credits", "Status");
+        System.out.println("------------------------------------------------------------------------------------");
 
         for (User u : users) {
-            System.out.println("ID: " + u.getUserId() +
-                    " | Name: " + u.getFullName() +
-                    " | Enrollment: " + u.getEnrollmentNo() +
-                    " | Dept: " + u.getDepartment() +
-                    " | Sem: " + u.getSemester() +
-                    " | Credits: " + u.getCredits() +
-                    " | Active: " + (u.isActive() ? "Yes" : "No"));
+            System.out.printf("%-4d %-22s %-12s %-18s %-4d %-8d %-8s%n",
+                    u.getUserId(),
+                    u.getFullName(),
+                    u.getEnrollmentNo(),
+                    u.getDepartment(),
+                    u.getSemester(),
+                    u.getCredits(),
+                    (u.isActive() ? "Active" : "Suspended"));
         }
+        System.out.println("------------------------------------------------------------------------------------");
     }
 
     private void viewAllSkills() {
@@ -1859,14 +1982,18 @@ public class ManagerMenu {
         }
 
         System.out.println("Total Skills: " + skills.size());
-        System.out.println("-------------------------------------");
+        System.out.printf("%-4s %-22s %-15s %-30s%n",
+                "ID", "Skill Name", "Category", "Description");
+        System.out.println("------------------------------------------------------------------------");
 
         for (Skill s : skills) {
-            System.out.println("ID: " + s.getSkillId() +
-                    " | Name: " + s.getSkillName() +
-                    " | Category: " + s.getCategory() +
-                    " | Description: " + s.getDescription());
+            System.out.printf("%-4d %-22s %-15s %-30s%n",
+                    s.getSkillId(),
+                    s.getSkillName(),
+                    s.getCategory(),
+                    s.getDescription());
         }
+        System.out.println("------------------------------------------------------------------------");
     }
 
     private void viewAllRequests() {
@@ -1879,17 +2006,21 @@ public class ManagerMenu {
         }
 
         System.out.println("Total Requests: " + requests.size());
-        System.out.println("-------------------------------------");
+        System.out.printf("%-6s %-8s %-10s %-10s %-8s %-12s %-20s%n",
+                "ReqID", "Sender", "Receiver", "SkillID", "Type", "Status", "Date");
+        System.out.println("------------------------------------------------------------------------------------");
 
         for (ExchangeRequest r : requests) {
-            System.out.println("Req ID: " + r.getRequestId() +
-                    " | Sender: " + r.getSenderId() +
-                    " | Receiver: " + r.getReceiverId() +
-                    " | Skill ID: " + r.getRequestedSkillId() +
-                    " | Type: " + r.getExchangeType() +
-                    " | Status: " + r.getStatus() +
-                    " | Date: " + r.getRequestDate());
+            System.out.printf("%-6d %-8d %-10d %-10d %-8s %-12s %-20s%n",
+                    r.getRequestId(),
+                    r.getSenderId(),
+                    r.getReceiverId(),
+                    r.getRequestedSkillId(),
+                    r.getExchangeType(),
+                    r.getStatus(),
+                    r.getRequestDate());
         }
+        System.out.println("------------------------------------------------------------------------------------");
     }
 
     private void viewAllSessions() {
@@ -1902,18 +2033,22 @@ public class ManagerMenu {
         }
 
         System.out.println("Total Sessions: " + sessions.size());
-        System.out.println("-------------------------------------");
+        System.out.printf("%-6s %-10s %-10s %-10s %-12s %-8s %-8s %-12s%n",
+                "SesID", "Teacher", "Learner", "SkillID", "Date", "Start", "End", "Status");
+        System.out.println("--------------------------------------------------------------------------------------------");
 
         for (LearningSession s : sessions) {
-            System.out.println("Session ID: " + s.getSessionId() +
-                    " | Teacher: " + s.getTeacherId() +
-                    " | Learner: " + s.getLearnerId() +
-                    " | Skill: " + s.getSkillId() +
-                    " | Date: " + s.getSessionDate() +
-                    " | Time: " + s.getStartTime() + "-" + s.getEndTime() +
-                    " | Mode: " + s.getMode() +
-                    " | Status: " + s.getStatus());
+            System.out.printf("%-6d %-10d %-10d %-10d %-12s %-8s %-8s %-12s%n",
+                    s.getSessionId(),
+                    s.getTeacherId(),
+                    s.getLearnerId(),
+                    s.getSkillId(),
+                    s.getSessionDate(),
+                    s.getStartTime(),
+                    s.getEndTime(),
+                    s.getStatus());
         }
+        System.out.println("--------------------------------------------------------------------------------------------");
     }
 
     private void viewAllFeedback() {
@@ -1926,17 +2061,23 @@ public class ManagerMenu {
         }
 
         System.out.println("Total Feedback: " + feedbackList.size());
-        System.out.println("-------------------------------------");
+        System.out.printf("%-6s %-10s %-10s %-10s %-8s %-25s %-20s%n",
+                "ID", "Session", "Reviewer", "Reviewed", "Rating", "Comment", "Date");
+        System.out.println("------------------------------------------------------------------------------------------------------");
 
         for (Feedback f : feedbackList) {
-            System.out.println("Feedback ID: " + f.getFeedbackId() +
-                    " | Session: " + f.getSessionId() +
-                    " | Reviewer: " + f.getReviewerId() +
-                    " | Reviewed: " + f.getReviewedUserId() +
-                    " | Rating: " + f.getRating() + "/5" +
-                    " | Comment: " + f.getComment() +
-                    " | Date: " + f.getFeedbackDate());
+            String comment = (f.getComment() != null && f.getComment().length() > 22)
+                    ? f.getComment().substring(0, 22) + "..." : f.getComment();
+            System.out.printf("%-6d %-10d %-10d %-10d %-8s %-25s %-20s%n",
+                    f.getFeedbackId(),
+                    f.getSessionId(),
+                    f.getReviewerId(),
+                    f.getReviewedUserId(),
+                    f.getRating() + "/5",
+                    comment != null ? comment : "No comment",
+                    f.getFeedbackDate());
         }
+        System.out.println("------------------------------------------------------------------------------------------------------");
     }
 
     private void viewCancellationHistory() {
@@ -2025,8 +2166,11 @@ public class ManagerMenu {
                 return;
             }
 
-            System.out.print("\nConfirm activation? (yes/no): ");
-            if (scanner.nextLine().equalsIgnoreCase("yes")) {
+            System.out.println("\nConfirm activation?");
+            System.out.println("1. Yes");
+            System.out.println("2. No");
+            System.out.print("Choose (1 or 2): ");
+            if (com.skillbridge.util.Validator.safeParseInt(scanner.nextLine()) == 1) {
                 if (managerService.activateUser(userId)) {
                     System.out.println("User has been activated. They can now login again.");
                 } else {
@@ -2042,8 +2186,11 @@ public class ManagerMenu {
                 return;
             }
 
-            System.out.print("\nConfirm deactivation? (yes/no): ");
-            if (scanner.nextLine().equalsIgnoreCase("yes")) {
+            System.out.println("\nConfirm deactivation?");
+            System.out.println("1. Yes");
+            System.out.println("2. No");
+            System.out.print("Choose (1 or 2): ");
+            if (com.skillbridge.util.Validator.safeParseInt(scanner.nextLine()) == 1) {
                 if (managerService.deactivateUser(userId)) {
                     System.out.println("User has been deactivated. They can no longer login.");
                 } else {
@@ -2093,8 +2240,11 @@ public class ManagerMenu {
             return;
         }
 
-        System.out.print("Confirm deduction of " + amount + " credits? (yes/no): ");
-        if (scanner.nextLine().equalsIgnoreCase("yes")) {
+        System.out.println("Confirm deduction of " + amount + " credits?");
+        System.out.println("1. Yes");
+        System.out.println("2. No");
+        System.out.print("Choose (1 or 2): ");
+        if (com.skillbridge.util.Validator.safeParseInt(scanner.nextLine()) == 1) {
             if (managerService.deductCredits(userId, amount)) {
                 System.out.println("Deducted " + amount + " credits from " + targetUser.getFullName());
                 System.out.println("New balance: " + Math.max(0, targetUser.getCredits() - amount));
@@ -2104,6 +2254,11 @@ public class ManagerMenu {
         } else {
             System.out.println("Deduction cancelled.");
         }
+    }
+
+    // NEW: Called from MainMenu smart login (no separate login needed)
+    public void showManagerDashboardDirect(Manager manager) {
+        showManagerDashboard(manager);
     }
 }
 
@@ -2116,6 +2271,7 @@ import com.skillbridge.model.LearningSession;
 import com.skillbridge.service.LearningSessionService;
 import com.skillbridge.util.SessionManager;
 import com.skillbridge.util.Validator;
+import com.skillbridge.model.ExchangeRequest;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -2161,32 +2317,65 @@ public class SessionMenu {
 
     private void handleScheduleSession() {
         System.out.println("\n--- SCHEDULE SESSION ---");
+        int myId = SessionManager.getCurrentUser().getUserId();
 
-        System.out.print("Enter Exchange Request ID: ");
+        // Show accepted requests that can be scheduled
+        System.out.println("\n--- Your Accepted Requests ---");
+        com.skillbridge.dao.ExchangeRequestDAO reqDAO = new com.skillbridge.dao.ExchangeRequestDAO();
+        List<com.skillbridge.model.ExchangeRequest> allRequests = reqDAO.getRequestsByUserId(myId);
+
+        boolean hasAccepted = false;
+        for (com.skillbridge.model.ExchangeRequest req : allRequests) {
+            if ("Accepted".equalsIgnoreCase(req.getStatus())) {
+                if (!hasAccepted) {
+                    System.out.println("Req ID | Partner | Skill ID | Type");
+                    System.out.println("-------|---------|----------|-----");
+                    hasAccepted = true;
+                }
+                int partnerId = (req.getSenderId() == myId) ? req.getReceiverId() : req.getSenderId();
+                com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+                com.skillbridge.model.User partner = userDAO.getUserById(partnerId);
+                String partnerName = partner != null ? partner.getFullName() : "Unknown";
+                System.out.println(req.getRequestId() + "      | " + partnerName + " (ID:" + partnerId + ") | " + req.getRequestedSkillId() + "        | " + req.getExchangeType());
+            }
+        }
+
+        if (!hasAccepted) {
+            System.out.println("No accepted requests found. Get a request accepted first!");
+            return;
+        }
+
+        System.out.print("\nSelect Request ID from above: ");
         int requestId = Validator.safeParseInt(scanner.nextLine());
         if (requestId == -1) { System.out.println("Invalid Request ID."); return; }
 
-        System.out.print("Enter Partner's User ID: ");
-        int partnerId = Validator.safeParseInt(scanner.nextLine());
-        if (partnerId == -1) { System.out.println("Invalid Partner ID."); return; }
+        // Auto-fill partner and skill from request
+        com.skillbridge.model.ExchangeRequest selectedReq = reqDAO.getRequestById(requestId);
+        if (selectedReq == null || !"Accepted".equalsIgnoreCase(selectedReq.getStatus())) {
+            System.out.println("Invalid or not accepted request.");
+            return;
+        }
 
-        System.out.print("Enter Skill ID: ");
-        int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
+        int partnerId = (selectedReq.getSenderId() == myId) ? selectedReq.getReceiverId() : selectedReq.getSenderId();
+        int skillId = selectedReq.getRequestedSkillId();
+
+        com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+        com.skillbridge.model.User partner = userDAO.getUserById(partnerId);
+        System.out.println("\nPartner: " + (partner != null ? partner.getFullName() : "Unknown"));
+        System.out.println("Skill ID: " + skillId);
 
         System.out.print("Enter Date (YYYY-MM-DD): ");
         LocalDate date = Validator.safeParseDate(scanner.nextLine());
-        if (date == null) { System.out.println("Invalid date. Use YYYY-MM-DD format."); return; }
+        if (date == null) { System.out.println("Invalid date."); return; }
 
         System.out.print("Enter Start Time (HH:MM): ");
         LocalTime startTime = Validator.safeParseTime(scanner.nextLine());
-        if (startTime == null) { System.out.println("Invalid time. Use HH:MM 24-hour format."); return; }
+        if (startTime == null) { System.out.println("Invalid time."); return; }
 
         System.out.print("Enter End Time (HH:MM): ");
         LocalTime endTime = Validator.safeParseTime(scanner.nextLine());
-        if (endTime == null) { System.out.println("Invalid time. Use HH:MM 24-hour format."); return; }
+        if (endTime == null) { System.out.println("Invalid time."); return; }
 
-        // Mode Selection (Number-based)
         System.out.println("\nSelect Mode:");
         System.out.println("  1. Online");
         System.out.println("  2. Offline");
@@ -2194,29 +2383,20 @@ public class SessionMenu {
         int modeChoice = Validator.safeParseInt(scanner.nextLine());
 
         String mode;
-        if (modeChoice == 1) {
-            mode = "Online";
-        } else if (modeChoice == 2) {
-            mode = "Offline";
-        } else {
-            System.out.println("Invalid choice. Please select 1 or 2.");
-            return;
-        }
+        if (modeChoice == 1) mode = "Online";
+        else if (modeChoice == 2) mode = "Offline";
+        else { System.out.println("Invalid choice."); return; }
 
         String link = "";
         String location = "";
-
         if (modeChoice == 1) {
-            // Online - Ask for meeting link only
             System.out.print("Enter Meeting Link: ");
             link = scanner.nextLine();
         } else {
-            // Offline - Ask for location only
             System.out.print("Enter Location: ");
             location = scanner.nextLine();
         }
 
-        int myId = SessionManager.getCurrentUser().getUserId();
         LearningSession session = new LearningSession(requestId, myId, partnerId, skillId, date, startTime, endTime, mode, link, location);
 
         if (sessionService.scheduleSession(session)) {
@@ -2230,23 +2410,21 @@ public class SessionMenu {
         List<LearningSession> sessions = sessionService.getUserSessionHistory(myId);
 
         if (sessions == null || sessions.isEmpty()) {
-            System.out.println("â„¹ï¸ No sessions yet.");
+            System.out.println("No sessions yet.");
         } else {
-            int count = 1;
+            System.out.printf("%-6s %-12s %-8s %-8s %-10s %-12s%n",
+                    "SesID", "Date", "Start", "End", "Mode", "Status");
+            System.out.println("--------------------------------------------------------------");
             for (LearningSession session : sessions) {
-                System.out.println("\n--- Session " + count + " ---");
-                System.out.println("Session ID  : " + session.getSessionId());
-                System.out.println("Date        : " + session.getSessionDate());
-                System.out.println("Time        : " + session.getStartTime() + " to " + session.getEndTime());
-                System.out.println("Mode        : " + session.getMode());
-                System.out.println("Status      : " + session.getStatus());
-                if (session.getMode().equalsIgnoreCase("Online")) {
-                    System.out.println("Meeting Link: " + session.getMeetingLink());
-                } else {
-                    System.out.println("Location    : " + session.getLocation());
-                }
-                count++;
+                System.out.printf("%-6d %-12s %-8s %-8s %-10s %-12s%n",
+                        session.getSessionId(),
+                        session.getSessionDate(),
+                        session.getStartTime(),
+                        session.getEndTime(),
+                        session.getMode(),
+                        session.getStatus());
             }
+            System.out.println("--------------------------------------------------------------");
         }
     }
 
@@ -2343,9 +2521,16 @@ public class SkillMenu {
         System.out.println("\n--- ALL PLATFORM SKILLS ---");
         List<Skill> skills = skillService.getAllSkills();
         if (skills != null && !skills.isEmpty()) {
+            System.out.printf("%-4s %-22s %-15s%n",
+                    "ID", "Skill Name", "Category");
+            System.out.println("------------------------------------------");
             for (Skill skill : skills) {
-                System.out.println("ID: " + skill.getSkillId() + " | Name: " + skill.getSkillName() + " | Category: " + skill.getCategory());
+                System.out.printf("%-4d %-22s %-15s%n",
+                        skill.getSkillId(),
+                        skill.getSkillName(),
+                        skill.getCategory());
             }
+            System.out.println("------------------------------------------");
         }
     }
 
@@ -2419,33 +2604,55 @@ public class SkillMenu {
     }
 
     private void handleSearchByDepartment() {
-        System.out.println("\n--- SEARCH BY DEPARTMENT ---");
-        System.out.print("Enter Skill ID: ");
-        int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("âŒ Invalid Skill ID."); return; }
-
+        System.out.println("\n--- SEARCH TEACHERS BY DEPARTMENT ---");
         System.out.print("Enter Department: ");
         String dept = scanner.nextLine();
 
-        List<User> results = searchService.searchStudentsByDepartment(dept, skillId);
-        printSearchResults(results);
+        List<User> results = searchService.searchStudentsByDepartment(dept);
+
+        if (results == null || results.isEmpty()) {
+            System.out.println("No teachers found in " + dept);
+        } else {
+            System.out.println("\n--- TEACHERS IN " + dept.toUpperCase() + " ---");
+            System.out.printf("%-4s %-22s %-4s %-10s%n", "ID", "Name", "Sem", "Credits");
+            System.out.println("--------------------------------------------");
+            for (User teacher : results) {
+                System.out.printf("%-4d %-22s %-4d %-10d%n",
+                        teacher.getUserId(),
+                        teacher.getFullName(),
+                        teacher.getSemester(),
+                        teacher.getCredits());
+            }
+            System.out.println("--------------------------------------------");
+        }
     }
 
     private void handleSearchBySemester() {
-        System.out.println("\n--- SEARCH BY SEMESTER ---");
-        System.out.print("Enter Skill ID: ");
-        int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("âŒ Invalid Skill ID."); return; }
-
+        System.out.println("\n--- SEARCH TEACHERS BY SEMESTER ---");
         System.out.print("Enter Semester (1-8): ");
         int sem = Validator.safeParseInt(scanner.nextLine());
         if (!Validator.isValidSemester(sem)) {
-            System.out.println("âŒ Invalid Semester. Must be between 1 and 8.");
+            System.out.println("Invalid Semester. Must be between 1 and 8.");
             return;
         }
 
-        List<User> results = searchService.searchStudentsBySemester(sem, skillId);
-        printSearchResults(results);
+        List<User> results = searchService.searchStudentsBySemester(sem);
+
+        if (results == null || results.isEmpty()) {
+            System.out.println("No teachers found in Semester " + sem);
+        } else {
+            System.out.println("\n--- TEACHERS IN SEMESTER " + sem + " ---");
+            System.out.printf("%-4s %-22s %-18s %-10s%n", "ID", "Name", "Department", "Credits");
+            System.out.println("------------------------------------------------------");
+            for (User teacher : results) {
+                System.out.printf("%-4d %-22s %-18s %-10d%n",
+                        teacher.getUserId(),
+                        teacher.getFullName(),
+                        teacher.getDepartment(),
+                        teacher.getCredits());
+            }
+            System.out.println("------------------------------------------------------");
+        }
     }
 
     private void handleGetRecommendations() {
@@ -2453,24 +2660,40 @@ public class SkillMenu {
         System.out.println("\n--- SMART RECOMMENDATIONS ---");
         System.out.print("Enter Skill ID: ");
         int skillId = Validator.safeParseInt(scanner.nextLine());
-        if (skillId == -1) { System.out.println("âŒ Invalid Skill ID."); return; }
+        if (skillId == -1) { System.out.println("Invalid Skill ID."); return; }
 
         List<User> recommendations = recommendationService.getRecommendedTeachers(currentUserId, skillId);
         if (recommendations != null && !recommendations.isEmpty()) {
             System.out.println("\n--- TOP MATCHES ---");
+            System.out.printf("%-4s %-22s %-18s %-4s%n",
+                    "ID", "Name", "Department", "Sem");
+            System.out.println("--------------------------------------------------");
             for (User teacher : recommendations) {
-                System.out.println("User ID: " + teacher.getUserId() + " | " + teacher.getFullName() + " | " + teacher.getDepartment() + " | Sem: " + teacher.getSemester());
+                System.out.printf("%-4d %-22s %-18s %-4d%n",
+                        teacher.getUserId(),
+                        teacher.getFullName(),
+                        teacher.getDepartment(),
+                        teacher.getSemester());
             }
+            System.out.println("--------------------------------------------------");
         }
     }
 
     private void printSearchResults(List<User> results) {
         if (results == null || results.isEmpty()) {
-            System.out.println("â„¹ï¸ No teachers found.");
+            System.out.println("No teachers found.");
         } else {
+            System.out.printf("%-4s %-22s %-18s %-4s%n",
+                    "ID", "Name", "Department", "Sem");
+            System.out.println("--------------------------------------------------");
             for (User teacher : results) {
-                System.out.println("User ID: " + teacher.getUserId() + " | " + teacher.getFullName() + " | " + teacher.getDepartment() + " | Sem: " + teacher.getSemester());
+                System.out.printf("%-4d %-22s %-18s %-4d%n",
+                        teacher.getUserId(),
+                        teacher.getFullName(),
+                        teacher.getDepartment(),
+                        teacher.getSemester());
             }
+            System.out.println("--------------------------------------------------");
         }
     }
 }
@@ -2652,11 +2875,9 @@ public class LeaderboardEntry {
     public void setActive(boolean active) { isActive = active; }
 
     public String toFormattedString() {
-        return String.format(
-                "Rank: %d | %s | Dept: %s | Sem: %d | Credits: %d | Teaching: %d | Learning: %d | Completed: %d | Avg Rating: %.2f | Active: %s",
+        return String.format("%-6d %-25s %-20s %-10d %-10d %-10d %-10d %-10d %-10.1f %-10s",
                 rank, name, department, semester, credits, teachingSessions, learningSessions,
-                completedSessions, averageRating, (isActive ? "Yes" : "No")
-        );
+                completedSessions, averageRating, (isActive ? "Yes" : "No"));
     }
 }
 
@@ -3726,27 +3947,26 @@ public class LeaderboardService {
         Queue<LeaderboardEntry> queue = buildLeaderboardQueue();
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH))) {
-            writer.write("========================================\n");
-            writer.write("       SKILLBRIDGE LEADERBOARD\n");
-            writer.write("       (Top Peer Learners)\n");
-            writer.write("========================================\n\n");
+            writer.write("===========================================================================================================================\n");
+            writer.write("                                      SKILLBRIDGE LEADERBOARD\n");
+            writer.write("==========================================================================================================================\n");
+            writer.write(String.format("%-6s %-25s %-20s %-10s %-10s %-10s %-10s %-10s %-10s %-10s%n",
+                    "Rank", "Name", "Department", "Semester", "Credits", "Teaching", "Learning", "Completed", "Rating", "Active"));
+            writer.write("---------------------------------------------------------------------------------------------------------------------------\n");
 
             if (queue.isEmpty()) {
                 writer.write("No active users found.\n");
-                return;
+            } else {
+                while (!queue.isEmpty()) {
+                    LeaderboardEntry entry = queue.poll();
+                    writer.write(entry.toFormattedString() + "\n");
+                }
             }
 
-            // Process Queue (FIFO)
-            while (!queue.isEmpty()) {
-                LeaderboardEntry entry = queue.poll();
-                writer.write(entry.toFormattedString() + "\n");
-                writer.write("----------------------------------------\n");
-            }
-
-            writer.write("\nGenerated using Queue Data Structure\n");
+            writer.write("============================================================================================================================\n");
 
         } catch (IOException e) {
-            System.err.println("File I/O Error writing leaderboard: " + e.getMessage());
+            System.err.println("File I/O Error: " + e.getMessage());
         }
     }
 
@@ -3756,20 +3976,26 @@ public class LeaderboardService {
     public void displayLeaderboard() {
         generateLeaderboardFile();
 
-        System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
-        System.out.println("â•‘        SKILLBRIDGE OVERALL STUDENTS RANKING             â•‘");
-        System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+        System.out.println("\n============================================================================================================================");
+        System.out.println("                                      SKILLBRIDGE LEADERBOARD");
+        System.out.println("==============================================================================================================================");
+        System.out.printf("%-6s %-25s %-20s %-10s %-10s %-10s %-10s %-10s %-10s %-10s%n",
+                "Rank", "Name", "Department", "Semester", "Credits", "Teaching", "Learning", "Completed", "Rating", "Active");
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println(line);
+        Queue<LeaderboardEntry> queue = buildLeaderboardQueue();
+
+        if (queue.isEmpty()) {
+            System.out.println("No active users found.");
+        } else {
+            while (!queue.isEmpty()) {
+                LeaderboardEntry entry = queue.poll();
+                System.out.println(entry.toFormattedString());
             }
-        } catch (IOException e) {
-            System.err.println("Error reading leaderboard file: " + e.getMessage());
         }
 
-        System.out.println("\nFile saved at: " + FILE_PATH);
+        System.out.println("==============================================================================================================================");
+        System.out.println("File saved at: " + FILE_PATH);
     }
 }
 
@@ -3999,11 +4225,14 @@ public class LearningSessionService {
         }
         System.out.println("===========================================");
 
-        System.out.print("\nDo you still want to cancel? (yes/no): ");
+        System.out.println("\nDo you still want to cancel?");
+        System.out.println("1. Yes");
+        System.out.println("2. No");
+        System.out.print("Choose (1 or 2): ");
         java.util.Scanner sc = new java.util.Scanner(System.in);
-        String confirm = sc.nextLine();
+        int confirm = com.skillbridge.util.Validator.safeParseInt(sc.nextLine());
 
-        if (!confirm.equalsIgnoreCase("yes") && !confirm.equalsIgnoreCase("y")) {
+        if (confirm != 1) {
             System.out.println("Cancellation aborted.");
             return false;
         }
@@ -4080,24 +4309,20 @@ public class ManagerService {
     private final ManagerDAO managerDAO = new ManagerDAO();
 
     // Manager login
-    public Manager loginManager(String username, String password) {
-        if (username == null || password == null || username.trim().isEmpty()) {
-            System.out.println("Username and password cannot be empty.");
+    public Manager loginManager(String email, String password) {
+        if (email == null || password == null || email.trim().isEmpty()) {
             return null;
         }
 
-        Manager manager = managerDAO.getManagerByUsername(username.trim());
+        Manager manager = managerDAO.getManagerByEmail(email.toLowerCase().trim());
         if (manager == null) {
-            System.out.println("Manager not found.");
             return null;
         }
 
         String hashedInput = hashPassword(password);
         if (!manager.getPasswordHash().equals(hashedInput)) {
-            System.out.println("Incorrect password.");
             return null;
         }
-
 
         return manager;
     }
@@ -4169,6 +4394,7 @@ package com.skillbridge.service;
 
 import com.skillbridge.dao.NotificationDAO;
 import com.skillbridge.model.Notification;
+import com.skillbridge.database.DBConnection;
 
 import java.util.List;
 import java.util.Stack;
@@ -4178,7 +4404,19 @@ public class NotificationService {
     private final NotificationDAO notificationDAO = new NotificationDAO();
 
     public void sendNotification(int userId, String message, String type) {
-        notificationDAO.createNotification(userId, message, type);
+        if (DBConnection.isLocalhost()) {
+            // XAMPP: Only send for events that have NO trigger
+            if (type.equals("REQUEST_ACCEPTED") ||
+                    type.equals("REQUEST_REJECTED") ||
+                    type.equals("REQUEST_CANCELLED")) {
+                notificationDAO.createNotification(userId, message, type);
+            }
+            // Session events â†’ Trigger handles automatically
+            // Request sent â†’ Trigger handles automatically
+        } else {
+            // TiDB: No triggers â€” Java handles ALL
+            notificationDAO.createNotification(userId, message, type);
+        }
     }
 
     public Stack<Notification> getUnseenStack(int userId) {
@@ -4422,49 +4660,17 @@ public class SearchService {
      * Search Students by Department using BST.
      * Users are fetched from DB, inserted into BST, then traversed sorted.
      */
-    public List<User> searchStudentsByDepartment(String department, int skillId) {
-        root = null; // Reset BST
+    public List<User> searchStudentsByDepartment(String department) {
+        root = null;
         List<User> sortedUsers = new ArrayList<>();
 
-        String sql = "SELECT u.* FROM Users u " +
+        String sql = "SELECT DISTINCT u.* FROM Users u " +
                 "JOIN UserSkills us ON u.user_id = us.user_id " +
-                "WHERE u.department = ? AND us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
+                "WHERE u.department = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
 
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, department);
-            stmt.setInt(2, skillId);
-            ResultSet rs = stmt.executeQuery();
-
-            while (rs.next()) {
-                User user = mapResultSetToUser(rs);
-                root = insertBST(root, user); // Insert into BST
-            }
-
-            inOrderTraversal(root, sortedUsers); // Get sorted result
-
-        } catch (SQLException e) {
-            System.err.println("Error searching students by department: " + e.getMessage());
-        }
-
-        return sortedUsers;
-    }
-
-    /**
-     * Search Students by Semester using BST.
-     */
-    public List<User> searchStudentsBySemester(int semester, int skillId) {
-        root = null; // Reset BST
-        List<User> sortedUsers = new ArrayList<>();
-
-        String sql = "SELECT u.* FROM Users u " +
-                "JOIN UserSkills us ON u.user_id = us.user_id " +
-                "WHERE u.semester = ? AND us.skill_id = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
-
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setInt(1, semester);
-            stmt.setInt(2, skillId);
             ResultSet rs = stmt.executeQuery();
 
             while (rs.next()) {
@@ -4475,7 +4681,34 @@ public class SearchService {
             inOrderTraversal(root, sortedUsers);
 
         } catch (SQLException e) {
-            System.err.println("Error searching students by semester: " + e.getMessage());
+            System.err.println("Error searching by department: " + e.getMessage());
+        }
+
+        return sortedUsers;
+    }
+
+    public List<User> searchStudentsBySemester(int semester) {
+        root = null;
+        List<User> sortedUsers = new ArrayList<>();
+
+        String sql = "SELECT DISTINCT u.* FROM Users u " +
+                "JOIN UserSkills us ON u.user_id = us.user_id " +
+                "WHERE u.semester = ? AND us.skill_type = 'Teaching' AND u.is_active = true";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, semester);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                User user = mapResultSetToUser(rs);
+                root = insertBST(root, user);
+            }
+
+            inOrderTraversal(root, sortedUsers);
+
+        } catch (SQLException e) {
+            System.err.println("Error searching by semester: " + e.getMessage());
         }
 
         return sortedUsers;
@@ -4655,8 +4888,6 @@ public class UserSkillService {
 
     public boolean addSkillToUser(int userId, int skillId, String skillType, String skillLevel) {
         try {
-            // Using Member 2's constructor to convert Strings to their Enums safely
-            // Passed 0 for ID because the database auto-increments it
             UserSkill userSkill = new UserSkill(
                     0,
                     skillId,
@@ -4666,10 +4897,28 @@ public class UserSkillService {
                     true
             );
 
+            // Check if skill already exists for this user
+            List<UserSkill> existingSkills = userSkillDAO.getSkillsByUserId(userId);
+            for (UserSkill existing : existingSkills) {
+                if (existing.getSkillId() == skillId && existing.getSkillType().equalsIgnoreCase(skillType)) {
+                    // Skill already exists â€” Update level instead
+                    if (existing.getSkillLevel().equalsIgnoreCase(skillLevel)) {
+                        System.out.println("Already at " + skillLevel + " level. No change needed.");
+                        return false;
+                    }
+                    boolean updated = userSkillDAO.updateSkillLevel(userId, skillId, skillType, skillLevel);
+                    if (updated) {
+                        System.out.println("Skill level updated: " + existing.getSkillLevel() + " -> " + skillLevel);
+                    }
+                    return updated;
+                }
+            }
+
+            // New skill â€” Add normally
             return userSkillDAO.addUserSkill(userSkill);
 
         } catch (IllegalArgumentException e) {
-            System.out.println("âŒ Invalid Skill Type or Level format. Please type exactly 'TEACHING' or 'LEARNING'.");
+            System.out.println("Invalid Skill Type or Level.");
             return false;
         }
     }

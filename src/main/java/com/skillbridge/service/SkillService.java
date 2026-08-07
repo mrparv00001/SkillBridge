@@ -58,4 +58,8 @@ public class SkillService {
         }
         return isAdded;
     }
+
+    public List<String> getTrendingSkills(int limit) {
+        return skillDAO.getTrendingSkills(limit);
+    }
 }
