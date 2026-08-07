@@ -3,11 +3,25 @@
        (Top Peer Learners)
 ========================================
 
-Rank: 1 | Rahul Sharma | Dept: Computer Science | Sem: 3 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+Rank: 1 | Amit Verma | Dept: Information Tech | Sem: 5 | Credits: 90 | Teaching: 5 | Learning: 2 | Completed: 2 | Avg Rating: 5.00 | Active: Yes
 ----------------------------------------
-Rank: 2 | Priya Singh | Dept: Computer Science | Sem: 3 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+Rank: 2 | Priya Singh | Dept: Computer Science | Sem: 3 | Credits: 60 | Teaching: 2 | Learning: 1 | Completed: 2 | Avg Rating: 5.00 | Active: Yes
 ----------------------------------------
-Rank: 3 | Amit Verma | Dept: Information Tech | Sem: 5 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+Rank: 3 | Karan Mehta | Dept: Computer Science | Sem: 5 | Credits: 60 | Teaching: 5 | Learning: 1 | Completed: 2 | Avg Rating: 4.50 | Active: Yes
+----------------------------------------
+Rank: 4 | Mishir | Dept: CS&IT | Sem: 3 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+----------------------------------------
+Rank: 5 | Rohan Desai | Dept: Electronics | Sem: 3 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+----------------------------------------
+Rank: 6 | Vikram Rao | Dept: Mechanical | Sem: 6 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+----------------------------------------
+Rank: 7 | Anjali Gupta | Dept: Computer Science | Sem: 4 | Credits: 45 | Teaching: 0 | Learning: 4 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
+----------------------------------------
+Rank: 8 | Sneha Patel | Dept: Information Tech | Sem: 3 | Credits: 40 | Teaching: 0 | Learning: 4 | Completed: 1 | Avg Rating: 4.00 | Active: Yes
+----------------------------------------
+Rank: 9 | Neha Kapoor | Dept: Electronics | Sem: 4 | Credits: 40 | Teaching: 0 | Learning: 1 | Completed: 1 | Avg Rating: 4.00 | Active: Yes
+----------------------------------------
+Rank: 10 | Rahul Sharma | Dept: Computer Science | Sem: 3 | Credits: 40 | Teaching: 1 | Learning: 1 | Completed: 2 | Avg Rating: 4.50 | Active: Yes
 ----------------------------------------
 
 Generated using Queue Data Structure
