@@ -47,13 +47,47 @@ public class FeedbackMenu {
         int currentUserId = SessionManager.getCurrentUser().getUserId();
         System.out.println("\n--- SUBMIT FEEDBACK ---");
 
-        System.out.print("Enter Session ID: ");
+        // Show completed sessions
+        System.out.println("\n--- Your Completed Sessions ---");
+        com.skillbridge.dao.LearningSessionDAO sessionDAO = new com.skillbridge.dao.LearningSessionDAO();
+        List<com.skillbridge.model.LearningSession> sessions = sessionDAO.getSessionsByUser(currentUserId);
+
+        boolean hasCompleted = false;
+        for (com.skillbridge.model.LearningSession s : sessions) {
+            if ("Completed".equalsIgnoreCase(s.getStatus())) {
+                if (!hasCompleted) {
+                    System.out.println("Session ID | Date       | Partner");
+                    System.out.println("-----------|------------|--------");
+                    hasCompleted = true;
+                }
+                int partnerId = (s.getTeacherId() == currentUserId) ? s.getLearnerId() : s.getTeacherId();
+                com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+                com.skillbridge.model.User partner = userDAO.getUserById(partnerId);
+                String partnerName = partner != null ? partner.getFullName() : "Unknown";
+                System.out.println(s.getSessionId() + "          | " + s.getSessionDate() + " | " + partnerName + " (ID:" + partnerId + ")");
+            }
+        }
+
+        if (!hasCompleted) {
+            System.out.println("No completed sessions found.");
+            return;
+        }
+
+        System.out.print("\nSelect Session ID from above: ");
         int sessionId = Validator.safeParseInt(scanner.nextLine());
         if (sessionId == -1) { System.out.println("Invalid Session ID."); return; }
 
-        System.out.print("Enter Reviewed User's ID: ");
-        int reviewedId = Validator.safeParseInt(scanner.nextLine());
-        if (reviewedId == -1) { System.out.println("Invalid User ID."); return; }
+        // Auto-detect reviewed user
+        com.skillbridge.model.LearningSession selectedSession = sessionDAO.getSessionById(sessionId);
+        if (selectedSession == null || !"Completed".equalsIgnoreCase(selectedSession.getStatus())) {
+            System.out.println("Invalid session.");
+            return;
+        }
+
+        int reviewedId = (selectedSession.getTeacherId() == currentUserId) ? selectedSession.getLearnerId() : selectedSession.getTeacherId();
+        com.skillbridge.dao.UserDAO userDAO = new com.skillbridge.dao.UserDAO();
+        com.skillbridge.model.User reviewedUser = userDAO.getUserById(reviewedId);
+        System.out.println("Reviewing: " + (reviewedUser != null ? reviewedUser.getFullName() : "Unknown"));
 
         System.out.print("Enter Rating (1-5): ");
         int rating = Validator.safeParseInt(scanner.nextLine());

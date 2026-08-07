@@ -9,25 +9,46 @@ import com.skillbridge.menu.MainMenu;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+
         System.out.println("==========================================");
-        System.out.println(" Welcome to SkillBridge Platform");
+        System.out.println("        SkillBridge Platform");
         System.out.println(" Peer Learning & Skill Exchange System");
         System.out.println("==========================================");
+
+        // --- Server Selection Menu ---
+        System.out.println("\nSelect Database Environment:");
+        System.out.println("1. Localhost Server (XAMPP)");
+        System.out.println("2. Online Server (TiDB Cloud)");
+        System.out.print("Enter choice (1 or 2): ");
+
+        String envChoice = scanner.nextLine();
+
+        if (envChoice.equals("1")) {
+            DBConnection.setUseLocalhost(true);
+
+        } else {
+            DBConnection.setUseLocalhost(false);
+
+        }
 
         // Test database connection on startup
         try (Connection conn = DBConnection.getConnection()) {
             if (conn != null && !conn.isClosed()) {
 
             } else {
-                System.err.println("Failed to connect to the database.");
+                System.err.println("âŒ Failed to connect to the database.");
                 return;
             }
         } catch (SQLException e) {
-            System.err.println("Database connection error: " + e.getMessage());
-            System.err.println("Make sure XAMPP Apache and MySQL are running!");
+            System.err.println("âŒ Database connection error: " + e.getMessage());
+            if (envChoice.equals("1")) {
+                System.err.println("ðŸ’¡ Make sure XAMPP Apache and MySQL are running!");
+            }
             return;
         }
 
@@ -531,6 +552,176 @@ public class ManagerDAO {
         }
         return feedbackList;
     }
+
+    // Add these 3 methods in ManagerDAO.java
+
+    public int getCancellationCountByUser(int userId) {
+        int count = 0;
+        String sql = "SELECT COUNT(*) as cancel_count FROM LearningSessions " +
+                "WHERE (teacher_id = ? OR learner_id = ?) AND status = 'Cancelled'";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            stmt.setInt(2, userId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                count = rs.getInt("cancel_count");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching cancellation count: " + e.getMessage());
+        }
+        return count;
+    }
+
+    public boolean deactivateUser(int userId) {
+        String sql = "UPDATE Users SET is_active = false WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error deactivating user: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean deductCredits(int userId, int amount) {
+        String sql = "UPDATE Users SET credits = GREATEST(0, credits - ?) WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, amount);
+            stmt.setInt(2, userId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error deducting credits: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean activateUser(int userId) {
+        String sql = "UPDATE Users SET is_active = true WHERE user_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error activating user: " + e.getMessage());
+            return false;
+        }
+    }
+}
+
+
+========== FILE: NotificationDAO.java ==========
+
+package com.skillbridge.dao;
+
+import com.skillbridge.database.DBConnection;
+import com.skillbridge.model.Notification;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class NotificationDAO {
+
+    public boolean createNotification(int userId, String message, String type) {
+        String sql = "{CALL sp_createNotification(?, ?, ?)}";
+        try (Connection conn = DBConnection.getConnection();
+             CallableStatement stmt = conn.prepareCall(sql)) {
+            stmt.setInt(1, userId);
+            stmt.setString(2, message);
+            stmt.setString(3, type);
+            stmt.execute();
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Error creating notification: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public List<Notification> getUnreadNotifications(int userId) {
+        List<Notification> notifications = new ArrayList<>();
+        String sql = "{CALL sp_getUnreadNotifications(?)}";
+        try (Connection conn = DBConnection.getConnection();
+             CallableStatement stmt = conn.prepareCall(sql)) {
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                notifications.add(mapResultSet(rs));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching unread: " + e.getMessage());
+        }
+        return notifications;
+    }
+
+    public boolean markAsRead(int notificationId) {
+        String sql = "{CALL sp_markNotificationRead(?)}";
+        try (Connection conn = DBConnection.getConnection();
+             CallableStatement stmt = conn.prepareCall(sql)) {
+            stmt.setInt(1, notificationId);
+            stmt.execute();
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Error marking notification: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean markAllAsRead(int userId) {
+        String sql = "{CALL sp_markAllRead(?)}";
+        try (Connection conn = DBConnection.getConnection();
+             CallableStatement stmt = conn.prepareCall(sql)) {
+            stmt.setInt(1, userId);
+            stmt.execute();
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Error marking all: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public List<Notification> getSeenNotifications(int userId) {
+        List<Notification> notifications = new ArrayList<>();
+        String sql = "{CALL sp_getSeenNotifications(?)}";
+        try (Connection conn = DBConnection.getConnection();
+             CallableStatement stmt = conn.prepareCall(sql)) {
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                notifications.add(mapResultSet(rs));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching seen: " + e.getMessage());
+        }
+        return notifications;
+    }
+
+    public int getUnreadCount(int userId) {
+        String sql = "SELECT fn_getUnreadCount(?) AS unread_count";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) return rs.getInt("unread_count");
+        } catch (SQLException e) {
+            System.err.println("Error counting: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    private Notification mapResultSet(ResultSet rs) throws SQLException {
+        Timestamp ts = rs.getTimestamp("created_at");
+        return new Notification(
+                rs.getInt("notification_id"),
+                rs.getInt("user_id"),
+                rs.getString("message"),
+                rs.getString("notification_type"),
+                rs.getBoolean("is_read"),
+                ts != null ? ts.toLocalDateTime() : null
+        );
+    }
 }
 
 
@@ -862,20 +1053,39 @@ import java.sql.SQLException;
 
 public class DBConnection {
 
-    // LOCALHOST XAMPP Configuration
-    private static final String URL = "jdbc:mysql://localhost:3306/skillbridge";
-    private static final String USER = "root";
-    private static final String PASSWORD = ""; // XAMPP default is empty
+    // Flag to track environment (defaults to online)
+    private static boolean useLocalhost = false;
+
+    // --- ONLINE CREDENTIALS (TiDB Cloud) ---
+    private static final String ONLINE_URL =
+            "jdbc:mysql://gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000/skillbridge?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3";
+    private static final String ONLINE_USER = "24cPrP7jfNiAnuf.root";
+    private static final String ONLINE_PASSWORD = "S1EnSarxsg8oMhzT";
+
+    // --- LOCALHOST CREDENTIALS (XAMPP Default) ---
+    private static final String LOCAL_URL = "jdbc:mysql://localhost:3306/skillbridge";
+    private static final String LOCAL_USER = "root";
+    private static final String LOCAL_PASSWORD = ""; // Default XAMPP password is empty
+
+    // Method to set environment before getting connection
+    public static void setUseLocalhost(boolean isLocal) {
+        useLocalhost = isLocal;
+    }
 
     public static Connection getConnection() throws SQLException {
+        // Dynamically select credentials based on user's choice
+        String url = useLocalhost ? LOCAL_URL : ONLINE_URL;
+        String user = useLocalhost ? LOCAL_USER : ONLINE_USER;
+        String password = useLocalhost ? LOCAL_PASSWORD : ONLINE_PASSWORD;
+
         try {
-            Connection con = DriverManager.getConnection(URL, USER, PASSWORD);
-            // Silent connection - no print statement
+            Connection con = DriverManager.getConnection(url, user, password);
+
             return con;
         } catch (SQLException e) {
-            System.err.println("Database Connection Failed!");
+            System.err.println("âŒ Database Connection Failed!");
             System.err.println("Reason: " + e.getMessage());
-            System.err.println("TIP: Make sure XAMPP MySQL is running!");
+            System.err.println("State: " + e.getSQLState());
             throw e;
         }
     }
@@ -887,20 +1097,21 @@ public class DBConnection {
 package com.skillbridge.menu;
 
 import com.skillbridge.model.User;
-import com.skillbridge.service.AuthenticationService;
-import com.skillbridge.service.UserService;
-import com.skillbridge.util.SessionManager;
-import com.skillbridge.util.Validator;
-
+import com.skillbridge.model.Notification;
 import com.skillbridge.model.Skill;
 import com.skillbridge.model.UserSkill;
+import com.skillbridge.service.AuthenticationService;
+import com.skillbridge.service.UserService;
 import com.skillbridge.service.SkillService;
 import com.skillbridge.service.UserSkillService;
 import com.skillbridge.service.LeaderboardService;
+import com.skillbridge.service.NotificationService;
+import com.skillbridge.util.SessionManager;
+import com.skillbridge.util.Validator;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
-import com.skillbridge.model.ExchangeRequest;
-import com.skillbridge.service.ExchangeRequestService;
 import java.util.Stack;
 
 public class DashboardMenu {
@@ -909,24 +1120,24 @@ public class DashboardMenu {
     private UserService userService;
     private AuthenticationService authService;
     private LeaderboardService leaderboardService;
+    private NotificationService notificationService;
 
     private SkillMenu skillMenu;
     private SessionMenu sessionMenu;
     private ExchangeRequestMenu requestMenu;
     private FeedbackMenu feedbackMenu;
-    private ExchangeRequestService exchangeRequestService;
 
     public DashboardMenu() {
         this.scanner = new Scanner(System.in);
         this.userService = new UserService();
         this.authService = new AuthenticationService();
         this.leaderboardService = new LeaderboardService();
+        this.notificationService = new NotificationService();
 
         this.skillMenu = new SkillMenu();
         this.sessionMenu = new SessionMenu();
         this.requestMenu = new ExchangeRequestMenu();
         this.feedbackMenu = new FeedbackMenu();
-        this.exchangeRequestService = new ExchangeRequestService();
     }
 
     public void showDashboard() {
@@ -938,9 +1149,12 @@ public class DashboardMenu {
 
             showNotificationPanel(currentUser.getUserId());
 
+            int unreadCount = notificationService.getUnseenCount(currentUser.getUserId());
+            String badge = unreadCount > 0 ? " | Notifications: " + unreadCount + " NEW" : "";
+
             System.out.println("\n=================================");
             System.out.println("   DASHBOARD - " + currentUser.getFullName().toUpperCase());
-            System.out.println("   ðŸ’³ Credits Available: " + currentUser.getCredits());
+            System.out.println("   Credits: " + currentUser.getCredits() + badge);
             System.out.println("=================================");
             System.out.println("1. View Profile");
             System.out.println("2. Update Profile");
@@ -967,16 +1181,92 @@ public class DashboardMenu {
                     loggedIn = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please try again.");
+                    System.out.println("Invalid choice.");
             }
         }
+    }
+
+    private void showNotificationPanel(int userId) {
+        boolean viewing = true;
+
+        while (viewing) {
+            Stack<Notification> unseenStack = notificationService.getUnseenStack(userId);
+
+            if (unseenStack.isEmpty()) {
+                return;
+            }
+
+            List<Notification> displayList = new ArrayList<>();
+            System.out.println("\n===============================================");
+            System.out.println("   NOTIFICATIONS (" + unseenStack.size() + " unseen)");
+            System.out.println("===============================================");
+
+            int count = 1;
+            while (!unseenStack.isEmpty()) {
+                Notification notif = unseenStack.pop();
+                displayList.add(notif);
+                String timeAgo = getTimeAgo(notif.getCreatedAt());
+                System.out.println(count + ". " + notif.getMessage() + " - " + timeAgo);
+                System.out.println();
+                count++;
+            }
+
+            System.out.println("===============================================");
+            System.out.println("1. Mark specific as SEEN (Enter number)");
+            System.out.println("2. Mark ALL as SEEN");
+            System.out.println("3. Continue to Dashboard");
+            System.out.print("Choose: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1":
+                    System.out.print("Enter notification number: ");
+                    int num = Validator.safeParseInt(scanner.nextLine());
+                    if (num >= 1 && num <= displayList.size()) {
+                        Notification selected = displayList.get(num - 1);
+                        if (notificationService.markAsSeen(selected.getNotificationId())) {
+                            System.out.println("Notification #" + num + " removed.");
+                        }
+                    } else {
+                        System.out.println("Invalid number.");
+                    }
+                    break;
+
+                case "2":
+                    notificationService.markAllAsSeen(userId);
+                    System.out.println("All notifications cleared.");
+                    viewing = false;
+                    break;
+
+                case "3":
+                    viewing = false;
+                    break;
+
+                default:
+                    System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private String getTimeAgo(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) return "Unknown time";
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        long minutes = java.time.Duration.between(dateTime, now).toMinutes();
+        long hours = java.time.Duration.between(dateTime, now).toHours();
+        long days = java.time.Duration.between(dateTime, now).toDays();
+
+        if (minutes < 1) return "Just now";
+        if (minutes < 60) return minutes + " minutes ago";
+        if (hours < 24) return hours + " hours ago";
+        if (days < 7) return days + " days ago";
+        if (days < 30) return (days / 7) + " weeks ago";
+        return (days / 30) + " months ago";
     }
 
     private void viewProfile() {
         System.out.println("\n--- MY PROFILE ---");
         User user = userService.getUserProfile(SessionManager.getCurrentUser().getUserId());
-
-        // Display profile line-by-line (clean format)
         System.out.println("User ID         : " + user.getUserId());
         System.out.println("Name            : " + user.getFullName());
         System.out.println("Enrollment No   : " + user.getEnrollmentNo());
@@ -988,20 +1278,17 @@ public class DashboardMenu {
         System.out.println("Credits         : " + user.getCredits());
         System.out.println("Status          : " + (user.isActive() ? "Active" : "Inactive"));
 
-        // Display skills
         System.out.println("\n--- MY SKILLS ---");
         UserSkillService userSkillService = new UserSkillService();
         SkillService skillService = new SkillService();
-
         List<UserSkill> mySkills = userSkillService.getUserSkills(user.getUserId());
 
         if (mySkills == null || mySkills.isEmpty()) {
-            System.out.println("No skills added yet. Go to Skill Menu to add skills!");
+            System.out.println("No skills added yet.");
         } else {
             List<Skill> allSkills = skillService.getAllSkills();
             System.out.println("Total Skills: " + mySkills.size());
             System.out.println("---------------------------------");
-
             int count = 1;
             for (UserSkill us : mySkills) {
                 String skillName = "Unknown";
@@ -1040,7 +1327,7 @@ public class DashboardMenu {
             if (Validator.isValidSemester(sem)) {
                 currentUser.setSemester(sem);
             } else {
-                System.out.println("âŒ Invalid semester. Must be between 1 and 8. Skipping.");
+                System.out.println("Invalid semester. Skipping.");
             }
         }
 
@@ -1050,7 +1337,7 @@ public class DashboardMenu {
             if (Validator.isValidPhone(phone)) {
                 currentUser.setPhone(phone);
             } else {
-                System.out.println("âŒ Invalid phone number. Skipping phone update.");
+                System.out.println("Invalid phone. Skipping.");
             }
         }
 
@@ -1059,62 +1346,6 @@ public class DashboardMenu {
         if (!bio.trim().isEmpty()) currentUser.setBio(bio);
 
         userService.updateUserProfile(currentUser);
-    }
-
-    /**
-     * Notification Panel using STACK Data Structure (LIFO)
-     * Latest activity shows on top - Like WhatsApp notifications
-     */
-    private void showNotificationPanel(int userId) {
-        Stack<ExchangeRequest> notificationStack = exchangeRequestService.getRequestNotificationsStack(userId);
-
-        if (notificationStack.isEmpty()) {
-            return; // No notifications - silent skip
-        }
-
-        System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
-        System.out.println("â•‘        RECENT NOTIFICATIONS (LATEST FIRST)   â•‘");
-        System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
-
-        int count = 0;
-        int maxShow = 5;
-
-        while (!notificationStack.isEmpty() && count < maxShow) {
-            ExchangeRequest req = notificationStack.pop(); // LIFO
-            String message = "";
-            String status = req.getStatus();
-
-            if (req.getSenderId() == userId) {
-                // I sent this request
-                if (status.equalsIgnoreCase("Pending")) {
-                    message = "You sent a request to User " + req.getReceiverId() + " (Pending)";
-                } else if (status.equalsIgnoreCase("Accepted")) {
-                    message = "User " + req.getReceiverId() + " ACCEPTED your request!";
-                } else if (status.equalsIgnoreCase("Rejected")) {
-                    message = "User " + req.getReceiverId() + " rejected your request";
-                } else if (status.equalsIgnoreCase("Cancelled")) {
-                    message = "You cancelled request to User " + req.getReceiverId();
-                }
-            } else {
-                // I received this request
-                if (status.equalsIgnoreCase("Pending")) {
-                    message = "User " + req.getSenderId() + " sent you a NEW request (Action Required!)";
-                } else if (status.equalsIgnoreCase("Accepted")) {
-                    message = "You accepted User " + req.getSenderId() + "'s request";
-                } else if (status.equalsIgnoreCase("Rejected")) {
-                    message = "You rejected User " + req.getSenderId() + "'s request";
-                }
-            }
-
-            System.out.println((count + 1) + ". " + message);
-            System.out.println("   Date: " + req.getRequestDate());
-            count++;
-        }
-
-        if (!notificationStack.isEmpty()) {
-            System.out.println("   ... and " + notificationStack.size() + " more (Check Exchange Requests menu)");
-        }
-        System.out.println("-----------------------------------------------\n");
     }
 }
 
@@ -1446,9 +1677,7 @@ public class MainMenu {
                     managerMenu.start();
                     break;
                 case "4":
-                    System.out.println("==========================================");
-                    System.out.println(" Thank you for using SkillBridge. Goodbye!");
-                    System.out.println("==========================================");
+
                     running = false;
                     break;
                 default:
@@ -1573,7 +1802,10 @@ public class ManagerMenu {
             System.out.println("4. View All Sessions");
             System.out.println("5. View All Feedback");
             System.out.println("6. View Leaderboard");
-            System.out.println("7. Logout");
+            System.out.println("7. View Cancellation History");    // NEW
+            System.out.println("8. Activate / Deactivate User");              // NEW
+            System.out.println("9. Deduct User Credits");          // NEW
+            System.out.println("10. Logout");
             System.out.print("Choose an option: ");
 
             String choice = scanner.nextLine();
@@ -1585,12 +1817,11 @@ public class ManagerMenu {
                 case "4": viewAllSessions(); break;
                 case "5": viewAllFeedback(); break;
                 case "6": leaderboardService.displayLeaderboard(); break;
-                case "7":
-                    System.out.println("Manager logged out.");
-                    loggedIn = false;
-                    break;
-                default:
-                    System.out.println("Invalid choice.");
+                case "7": viewCancellationHistory(); break;    // NEW
+                case "8": deactivateUser(); break;             // NEW
+                case "9": deductUserCredits(); break;          // NEW
+                case "10": loggedIn = false; break;
+                default: System.out.println("Invalid choice.");
             }
         }
     }
@@ -1705,6 +1936,173 @@ public class ManagerMenu {
                     " | Rating: " + f.getRating() + "/5" +
                     " | Comment: " + f.getComment() +
                     " | Date: " + f.getFeedbackDate());
+        }
+    }
+
+    private void viewCancellationHistory() {
+        System.out.println("\n--- USER CANCELLATION HISTORY ---");
+        List<User> users = managerService.getAllUsers();
+
+        if (users == null || users.isEmpty()) {
+            System.out.println("No users found.");
+            return;
+        }
+
+        System.out.println("=================================================================");
+        System.out.printf("%-4s %-25s %-15s %-15s %-10s%n",
+                "ID", "Name", "Cancellations", "Credits", "Status");
+        System.out.println("=================================================================");
+
+        for (User u : users) {
+            int cancelCount = managerService.getCancellationCount(u.getUserId());
+            String status = u.isActive() ? "Active" : "Suspended";
+
+            System.out.printf("%-4d %-25s %-15d %-15d %-10s%n",
+                    u.getUserId(),
+                    u.getFullName(),
+                    cancelCount,
+                    u.getCredits(),
+                    status);
+        }
+        System.out.println("=================================================================");
+        System.out.println("\nTIP: Use Option 8/9 to take action on users with high cancellations.");
+    }
+
+    private void deactivateUser() {
+        System.out.println("\n--- ACTIVATE / DEACTIVATE USER ---");
+        System.out.println("1. Activate User");
+        System.out.println("2. Deactivate User");
+        System.out.print("Choose (1 or 2): ");
+
+        int actionChoice = com.skillbridge.util.Validator.safeParseInt(scanner.nextLine());
+
+        if (actionChoice != 1 && actionChoice != 2) {
+            System.out.println("Invalid choice.");
+            return;
+        }
+
+        System.out.print("Enter User ID: ");
+        int userId = com.skillbridge.util.Validator.safeParseInt(scanner.nextLine());
+        if (userId == -1) {
+            System.out.println("Invalid User ID.");
+            return;
+        }
+
+        List<User> users = managerService.getAllUsers();
+        User targetUser = null;
+        for (User u : users) {
+            if (u.getUserId() == userId) {
+                targetUser = u;
+                break;
+            }
+        }
+
+        if (targetUser == null) {
+            System.out.println("User not found.");
+            return;
+        }
+
+        int cancelCount = managerService.getCancellationCount(userId);
+
+        System.out.println("\n===========================================");
+        System.out.println("|          USER DETAILS                   |");
+        System.out.println("===========================================");
+        System.out.println("User ID         : " + targetUser.getUserId());
+        System.out.println("Name            : " + targetUser.getFullName());
+        System.out.println("Enrollment No   : " + targetUser.getEnrollmentNo());
+        System.out.println("Email           : " + targetUser.getEmail());
+        System.out.println("Department      : " + targetUser.getDepartment());
+        System.out.println("Semester        : " + targetUser.getSemester());
+        System.out.println("Phone           : " + targetUser.getPhone());
+        System.out.println("Credits         : " + targetUser.getCredits());
+        System.out.println("Cancellations   : " + cancelCount);
+        System.out.println("Current Status  : " + (targetUser.isActive() ? "Active" : "Suspended"));
+        System.out.println("===========================================");
+
+        if (actionChoice == 1) {
+            if (targetUser.isActive()) {
+                System.out.println("\nUser is already Active. No change needed.");
+                return;
+            }
+
+            System.out.print("\nConfirm activation? (yes/no): ");
+            if (scanner.nextLine().equalsIgnoreCase("yes")) {
+                if (managerService.activateUser(userId)) {
+                    System.out.println("User has been activated. They can now login again.");
+                } else {
+                    System.out.println("Failed to activate user.");
+                }
+            } else {
+                System.out.println("Activation cancelled.");
+            }
+
+        } else {
+            if (!targetUser.isActive()) {
+                System.out.println("\nUser is already Suspended. No change needed.");
+                return;
+            }
+
+            System.out.print("\nConfirm deactivation? (yes/no): ");
+            if (scanner.nextLine().equalsIgnoreCase("yes")) {
+                if (managerService.deactivateUser(userId)) {
+                    System.out.println("User has been deactivated. They can no longer login.");
+                } else {
+                    System.out.println("Failed to deactivate user.");
+                }
+            } else {
+                System.out.println("Deactivation cancelled.");
+            }
+        }
+    }
+
+    private void deductUserCredits() {
+        System.out.println("\n--- DEDUCT USER CREDITS ---");
+        System.out.print("Enter User ID: ");
+        int userId = com.skillbridge.util.Validator.safeParseInt(scanner.nextLine());
+        if (userId == -1) {
+            System.out.println("Invalid User ID.");
+            return;
+        }
+
+        // Show user info
+        List<User> users = managerService.getAllUsers();
+        User targetUser = null;
+        for (User u : users) {
+            if (u.getUserId() == userId) {
+                targetUser = u;
+                break;
+            }
+        }
+
+        if (targetUser == null) {
+            System.out.println("User not found.");
+            return;
+        }
+
+        int cancelCount = managerService.getCancellationCount(userId);
+
+        System.out.println("\n--- USER DETAILS ---");
+        System.out.println("Name           : " + targetUser.getFullName());
+        System.out.println("Current Credits: " + targetUser.getCredits());
+        System.out.println("Cancellations  : " + cancelCount);
+
+        System.out.print("\nEnter credits to deduct: ");
+        int amount = com.skillbridge.util.Validator.safeParseInt(scanner.nextLine());
+        if (amount <= 0) {
+            System.out.println("Amount must be positive.");
+            return;
+        }
+
+        System.out.print("Confirm deduction of " + amount + " credits? (yes/no): ");
+        if (scanner.nextLine().equalsIgnoreCase("yes")) {
+            if (managerService.deductCredits(userId, amount)) {
+                System.out.println("Deducted " + amount + " credits from " + targetUser.getFullName());
+                System.out.println("New balance: " + Math.max(0, targetUser.getCredits() - amount));
+            } else {
+                System.out.println("Failed to deduct credits.");
+            }
+        } else {
+            System.out.println("Deduction cancelled.");
         }
     }
 }
@@ -2426,6 +2824,52 @@ public class Manager {
 }
 
 
+========== FILE: Notification.java ==========
+
+package com.skillbridge.model;
+
+import java.time.LocalDateTime;
+
+public class Notification {
+    private int notificationId;
+    private int userId;
+    private String message;
+    private String notificationType;
+    private boolean isRead;
+    private LocalDateTime createdAt;
+
+    public Notification() {}
+
+    public Notification(int notificationId, int userId, String message,
+                        String notificationType, boolean isRead, LocalDateTime createdAt) {
+        this.notificationId = notificationId;
+        this.userId = userId;
+        this.message = message;
+        this.notificationType = notificationType;
+        this.isRead = isRead;
+        this.createdAt = createdAt;
+    }
+
+    public int getNotificationId() { return notificationId; }
+    public void setNotificationId(int id) { this.notificationId = id; }
+
+    public int getUserId() { return userId; }
+    public void setUserId(int userId) { this.userId = userId; }
+
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+
+    public String getNotificationType() { return notificationType; }
+    public void setNotificationType(String type) { this.notificationType = type; }
+
+    public boolean isRead() { return isRead; }
+    public void setRead(boolean read) { this.isRead = read; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+}
+
+
 ========== FILE: Skill.java ==========
 
 package com.skillbridge.model;
@@ -2935,6 +3379,7 @@ import java.util.Stack;
 public class ExchangeRequestService {
 
     private final ExchangeRequestDAO exchangeRequestDAO = new ExchangeRequestDAO();
+    private final NotificationService notificationService = new NotificationService();
 
     public boolean sendExchangeRequest(int senderId, int receiverId, int requestedSkillId, String exchangeType, String message) {
         if (senderId == receiverId) {
@@ -2942,7 +3387,6 @@ public class ExchangeRequestService {
             return false;
         }
 
-        // Check for duplicate pending request
         List<ExchangeRequest> existingRequests = exchangeRequestDAO.getRequestsByUserId(senderId);
         for (ExchangeRequest req : existingRequests) {
             if (req.getSenderId() == senderId &&
@@ -2963,16 +3407,20 @@ public class ExchangeRequestService {
 
         boolean success = exchangeRequestDAO.createRequest(request);
 
-        // POP-UP NOTIFICATION
         if (success) {
-            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
-            System.out.println("â•‘   EXCHANGE REQUEST SENT!                 â•‘");
-            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
-            System.out.println("â•‘ Sent to User ID: " + receiverId);
-            System.out.println("â•‘ Skill ID: " + requestedSkillId);
-            System.out.println("â•‘ Type: " + exchangeType);
-            System.out.println("â•‘ Notification sent to receiver.           â•‘");
-            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+            // Real Notification to Receiver
+            notificationService.sendNotification(receiverId,
+                    "New exchange request from User " + senderId + " for Skill ID " + requestedSkillId,
+                    "REQUEST_RECEIVED");
+
+            System.out.println("\n===========================================");
+            System.out.println("|   EXCHANGE REQUEST SENT!                |");
+            System.out.println("===========================================");
+            System.out.println("Sent to User ID: " + receiverId);
+            System.out.println("Skill ID       : " + requestedSkillId);
+            System.out.println("Type           : " + exchangeType);
+            System.out.println("Notification sent to receiver.");
+            System.out.println("===========================================\n");
         }
 
         return success;
@@ -2995,15 +3443,19 @@ public class ExchangeRequestService {
 
         boolean success = exchangeRequestDAO.updateStatus(requestId, "Accepted");
 
-        // POP-UP NOTIFICATION
         if (success) {
-            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
-            System.out.println("â•‘   REQUEST ACCEPTED SUCCESSFULLY!         â•‘");
-            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
-            System.out.println("â•‘ Request ID: " + requestId);
-            System.out.println("â•‘ You can now schedule the session.        â•‘");
-            System.out.println("â•‘ Notification sent to sender.             â•‘");
-            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+            // Real Notification to Sender
+            notificationService.sendNotification(request.getSenderId(),
+                    "Your request (ID: " + requestId + ") has been ACCEPTED. Schedule the session now!",
+                    "REQUEST_ACCEPTED");
+
+            System.out.println("\n===========================================");
+            System.out.println("|   REQUEST ACCEPTED SUCCESSFULLY!        |");
+            System.out.println("===========================================");
+            System.out.println("Request ID     : " + requestId);
+            System.out.println("You can now schedule the session.");
+            System.out.println("Notification sent to sender.");
+            System.out.println("===========================================\n");
         }
 
         return success;
@@ -3026,14 +3478,18 @@ public class ExchangeRequestService {
 
         boolean success = exchangeRequestDAO.updateStatus(requestId, "Rejected");
 
-        // POP-UP NOTIFICATION
         if (success) {
-            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
-            System.out.println("â•‘   REQUEST REJECTED                       â•‘");
-            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
-            System.out.println("â•‘ Request ID: " + requestId);
-            System.out.println("â•‘ Notification sent to sender.             â•‘");
-            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+            // Real Notification to Sender
+            notificationService.sendNotification(request.getSenderId(),
+                    "Your request (ID: " + requestId + ") has been REJECTED.",
+                    "REQUEST_REJECTED");
+
+            System.out.println("\n===========================================");
+            System.out.println("|   REQUEST REJECTED                      |");
+            System.out.println("===========================================");
+            System.out.println("Request ID     : " + requestId);
+            System.out.println("Notification sent to sender.");
+            System.out.println("===========================================\n");
         }
 
         return success;
@@ -3056,55 +3512,49 @@ public class ExchangeRequestService {
 
         boolean success = exchangeRequestDAO.updateStatus(requestId, "Cancelled");
 
-        // POP-UP NOTIFICATION
         if (success) {
-            System.out.println("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—");
-            System.out.println("â•‘   REQUEST CANCELLED                      â•‘");
-            System.out.println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£");
-            System.out.println("â•‘ Request ID: " + requestId);
-            System.out.println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+            // Real Notification to Receiver
+            notificationService.sendNotification(request.getReceiverId(),
+                    "Exchange request (ID: " + requestId + ") has been CANCELLED by sender.",
+                    "REQUEST_CANCELLED");
+
+            System.out.println("\n===========================================");
+            System.out.println("|   REQUEST CANCELLED                     |");
+            System.out.println("===========================================");
+            System.out.println("Request ID     : " + requestId);
+            System.out.println("===========================================\n");
         }
 
         return success;
     }
 
-    // Return as LinkedList (Data Structure requirement)
     public List<ExchangeRequest> getUserRequestHistory(int userId) {
         return new LinkedList<>(exchangeRequestDAO.getRequestsByUserId(userId));
     }
 
-    /**
-     * QUEUE Data Structure - Get pending requests in FIFO order
-     * (First received request should be accepted first)
-     */
     public Queue<ExchangeRequest> getPendingRequestsQueue(int receiverId) {
         Queue<ExchangeRequest> pendingQueue = new LinkedList<>();
         List<ExchangeRequest> allRequests = exchangeRequestDAO.getRequestsByUserId(receiverId);
 
-        // Sort by date (oldest first) and add to queue
         allRequests.sort((r1, r2) -> r1.getRequestDate().compareTo(r2.getRequestDate()));
 
         for (ExchangeRequest req : allRequests) {
             if (req.getReceiverId() == receiverId && "Pending".equalsIgnoreCase(req.getStatus())) {
-                pendingQueue.offer(req); // FIFO
+                pendingQueue.offer(req);
             }
         }
 
         return pendingQueue;
     }
 
-    /**
-     * STACK Data Structure - Get notifications history (LIFO - Latest first)
-     */
     public Stack<ExchangeRequest> getRequestNotificationsStack(int userId) {
         Stack<ExchangeRequest> notificationStack = new Stack<>();
         List<ExchangeRequest> allRequests = exchangeRequestDAO.getRequestsByUserId(userId);
 
-        // Sort by date (oldest first) then push to stack (latest goes on top)
         allRequests.sort((r1, r2) -> r1.getRequestDate().compareTo(r2.getRequestDate()));
 
         for (ExchangeRequest req : allRequests) {
-            notificationStack.push(req); // LIFO - Latest on top
+            notificationStack.push(req);
         }
 
         return notificationStack;
@@ -3348,6 +3798,7 @@ public class LearningSessionService {
     private CreditService creditService;
     private UserDAO userDAO;
     private UserSkillDAO userSkillDAO;
+    private NotificationService notificationService;
 
     public LearningSessionService() {
         this.sessionDAO = new LearningSessionDAO();
@@ -3355,12 +3806,22 @@ public class LearningSessionService {
         this.creditService = new CreditService();
         this.userDAO = new UserDAO();
         this.userSkillDAO = new UserSkillDAO();
+        this.notificationService = new NotificationService();
     }
 
     public boolean scheduleSession(LearningSession session) {
         if (!Validator.isFutureDate(session.getSessionDate())) {
             System.out.println("Schedule failed: Date must be today or in the future.");
             return false;
+        }
+
+        if (session.getSessionDate().equals(java.time.LocalDate.now())) {
+            if (session.getStartTime().isBefore(java.time.LocalTime.now())) {
+                System.out.println("Schedule failed: Start time has already passed today.");
+                System.out.println("Current time: " + java.time.LocalTime.now().withSecond(0).withNano(0));
+                System.out.println("Your start time: " + session.getStartTime());
+                return false;
+            }
         }
 
         if (!Validator.isValidTimeRange(session.getStartTime(), session.getEndTime())) {
@@ -3373,7 +3834,6 @@ public class LearningSessionService {
             return false;
         }
 
-        // LinkedList Data Structure - Time clash check for teacher
         LinkedList<LearningSession> teacherSessions = new LinkedList<>(sessionDAO.getSessionsByUser(session.getTeacherId()));
         for (LearningSession existing : teacherSessions) {
             if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
@@ -3387,7 +3847,6 @@ public class LearningSessionService {
             }
         }
 
-        // LinkedList Data Structure - Time clash check for learner
         LinkedList<LearningSession> learnerSessions = new LinkedList<>(sessionDAO.getSessionsByUser(session.getLearnerId()));
         for (LearningSession existing : learnerSessions) {
             if (existing.getStatus().equalsIgnoreCase("Scheduled") &&
@@ -3401,7 +3860,6 @@ public class LearningSessionService {
             }
         }
 
-        // Credit System - Process transaction
         ExchangeRequest request = requestDAO.getRequestById(session.getRequestId());
         boolean isSwap = request != null && "Swap".equalsIgnoreCase(request.getExchangeType());
 
@@ -3418,8 +3876,15 @@ public class LearningSessionService {
 
         boolean success = sessionDAO.scheduleSession(session);
 
-        // POP-UP NOTIFICATION
         if (success) {
+            // Real Notifications to both users
+            notificationService.sendNotification(session.getTeacherId(),
+                    "New session scheduled on " + session.getSessionDate() + " at " + session.getStartTime(),
+                    "SESSION_SCHEDULED");
+            notificationService.sendNotification(session.getLearnerId(),
+                    "Your session confirmed on " + session.getSessionDate() + " at " + session.getStartTime(),
+                    "SESSION_SCHEDULED");
+
             System.out.println("\n===========================================");
             System.out.println("|      SESSION SCHEDULED SUCCESSFULLY!    |");
             System.out.println("===========================================");
@@ -3462,8 +3927,15 @@ public class LearningSessionService {
 
         boolean success = sessionDAO.markSessionCompleted(sessionId);
 
-        // POP-UP NOTIFICATION
         if (success) {
+            // Real Notifications to both users
+            notificationService.sendNotification(session.getTeacherId(),
+                    "Session " + sessionId + " completed. Please submit feedback!",
+                    "SESSION_COMPLETED");
+            notificationService.sendNotification(session.getLearnerId(),
+                    "Session " + sessionId + " completed. Please submit feedback!",
+                    "SESSION_COMPLETED");
+
             System.out.println("\n===========================================");
             System.out.println("|      SESSION COMPLETED SUCCESSFULLY!    |");
             System.out.println("===========================================");
@@ -3493,7 +3965,6 @@ public class LearningSessionService {
             return false;
         }
 
-        // CANCELLATION POLICY - 2 HOUR RULE
         java.time.LocalDateTime sessionDateTime = java.time.LocalDateTime.of(
                 session.getSessionDate(),
                 session.getStartTime()
@@ -3510,7 +3981,6 @@ public class LearningSessionService {
         boolean wasCharged = request != null && "Direct".equalsIgnoreCase(request.getExchangeType());
         boolean eligibleForRefund = hoursUntilSession >= 2;
 
-        // Show cancellation policy
         System.out.println("\n===========================================");
         System.out.println("|    CANCELLATION POLICY NOTICE            |");
         System.out.println("===========================================");
@@ -3529,7 +3999,6 @@ public class LearningSessionService {
         }
         System.out.println("===========================================");
 
-        // Confirm cancellation
         System.out.print("\nDo you still want to cancel? (yes/no): ");
         java.util.Scanner sc = new java.util.Scanner(System.in);
         String confirm = sc.nextLine();
@@ -3539,10 +4008,8 @@ public class LearningSessionService {
             return false;
         }
 
-        // Update database (Trigger will auto-fire!)
         boolean success = sessionDAO.updateSessionStatus(sessionId, "Cancelled");
 
-        // Apply refund only if eligible
         if (success && wasCharged && eligibleForRefund) {
             String tLevel = getTeacherSkillLevel(session.getTeacherId(), session.getSkillId());
             int refundAmount = getCostByLevel(tLevel);
@@ -3559,27 +4026,32 @@ public class LearningSessionService {
             System.out.println("No refund issued. Teacher keeps credits as compensation.");
         }
 
-        // Success message (Trigger handles notification automatically!)
         if (success) {
+            // Real Notifications to both users
+            notificationService.sendNotification(session.getTeacherId(),
+                    "Session " + sessionId + " has been cancelled. Date: " + session.getSessionDate(),
+                    "SESSION_CANCELLED");
+            notificationService.sendNotification(session.getLearnerId(),
+                    "Session " + sessionId + " has been cancelled. Date: " + session.getSessionDate(),
+                    "SESSION_CANCELLED");
+
             System.out.println("\n===========================================");
             System.out.println("|      SESSION CANCELLED SUCCESSFULLY!    |");
             System.out.println("===========================================");
             System.out.println("Session ID  : " + sessionId);
-            System.out.println("Both users notified via database trigger.");
+            System.out.println("Both users notified.");
             System.out.println("===========================================\n");
         }
 
         return success;
     }
 
-    // Helper method to get credit cost based on skill level
     private int getCostByLevel(String skillLevel) {
         if ("Advanced".equalsIgnoreCase(skillLevel)) return 10;
         if ("Intermediate".equalsIgnoreCase(skillLevel)) return 7;
         return 5;
     }
 
-    // Helper method to get teacher's skill level for a specific skill
     private String getTeacherSkillLevel(int teacherId, int skillId) {
         List<UserSkill> skills = userSkillDAO.getSkillsByUserId(teacherId);
         for (UserSkill s : skills) {
@@ -3669,6 +4141,74 @@ public class ManagerService {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("Hashing error", e);
         }
+    }
+
+    // Add these 3 methods in ManagerService.java
+
+    public int getCancellationCount(int userId) {
+        return managerDAO.getCancellationCountByUser(userId);
+    }
+
+    public boolean deactivateUser(int userId) {
+        return managerDAO.deactivateUser(userId);
+    }
+
+    public boolean deductCredits(int userId, int amount) {
+        return managerDAO.deductCredits(userId, amount);
+    }
+
+    public boolean activateUser(int userId) {
+        return managerDAO.activateUser(userId);
+    }
+}
+
+
+========== FILE: NotificationService.java ==========
+
+package com.skillbridge.service;
+
+import com.skillbridge.dao.NotificationDAO;
+import com.skillbridge.model.Notification;
+
+import java.util.List;
+import java.util.Stack;
+
+public class NotificationService {
+
+    private final NotificationDAO notificationDAO = new NotificationDAO();
+
+    public void sendNotification(int userId, String message, String type) {
+        notificationDAO.createNotification(userId, message, type);
+    }
+
+    public Stack<Notification> getUnseenStack(int userId) {
+        List<Notification> unreadList = notificationDAO.getUnreadNotifications(userId);
+        Stack<Notification> unseenStack = new Stack<>();
+        for (int i = unreadList.size() - 1; i >= 0; i--) {
+            unseenStack.push(unreadList.get(i));
+        }
+        return unseenStack;
+    }
+
+    public Stack<Notification> getSeenStack(int userId) {
+        List<Notification> readList = notificationDAO.getSeenNotifications(userId);
+        Stack<Notification> seenStack = new Stack<>();
+        for (int i = readList.size() - 1; i >= 0; i--) {
+            seenStack.push(readList.get(i));
+        }
+        return seenStack;
+    }
+
+    public boolean markAsSeen(int notificationId) {
+        return notificationDAO.markAsRead(notificationId);
+    }
+
+    public boolean markAllAsSeen(int userId) {
+        return notificationDAO.markAllAsRead(userId);
+    }
+
+    public int getUnseenCount(int userId) {
+        return notificationDAO.getUnreadCount(userId);
     }
 }
 

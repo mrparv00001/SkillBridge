@@ -15,8 +15,6 @@ public class UserSkillService {
 
     public boolean addSkillToUser(int userId, int skillId, String skillType, String skillLevel) {
         try {
-            // Using Member 2's constructor to convert Strings to their Enums safely
-            // Passed 0 for ID because the database auto-increments it
             UserSkill userSkill = new UserSkill(
                     0,
                     skillId,
@@ -26,10 +24,28 @@ public class UserSkillService {
                     true
             );
 
+            // Check if skill already exists for this user
+            List<UserSkill> existingSkills = userSkillDAO.getSkillsByUserId(userId);
+            for (UserSkill existing : existingSkills) {
+                if (existing.getSkillId() == skillId && existing.getSkillType().equalsIgnoreCase(skillType)) {
+                    // Skill already exists — Update level instead
+                    if (existing.getSkillLevel().equalsIgnoreCase(skillLevel)) {
+                        System.out.println("Already at " + skillLevel + " level. No change needed.");
+                        return false;
+                    }
+                    boolean updated = userSkillDAO.updateSkillLevel(userId, skillId, skillType, skillLevel);
+                    if (updated) {
+                        System.out.println("Skill level updated: " + existing.getSkillLevel() + " -> " + skillLevel);
+                    }
+                    return updated;
+                }
+            }
+
+            // New skill — Add normally
             return userSkillDAO.addUserSkill(userSkill);
 
         } catch (IllegalArgumentException e) {
-            System.out.println("❌ Invalid Skill Type or Level format. Please type exactly 'TEACHING' or 'LEARNING'.");
+            System.out.println("Invalid Skill Type or Level.");
             return false;
         }
     }

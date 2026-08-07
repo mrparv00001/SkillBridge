@@ -1,13 +1,16 @@
-========================================
-       SKILLBRIDGE LEADERBOARD
-       (Top Peer Learners)
-========================================
-
-Rank: 1 | Rahul Sharma | Dept: Computer Science | Sem: 3 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
-----------------------------------------
-Rank: 2 | Priya Singh | Dept: Computer Science | Sem: 3 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
-----------------------------------------
-Rank: 3 | Amit Verma | Dept: Information Tech | Sem: 5 | Credits: 50 | Teaching: 0 | Learning: 0 | Completed: 0 | Avg Rating: 0.00 | Active: Yes
-----------------------------------------
-
-Generated using Queue Data Structure
+===========================================================================================================================
+                                      SKILLBRIDGE LEADERBOARD
+==========================================================================================================================
+Rank   Name                      Department           Semester   Credits    Teaching   Learning   Completed  Rating     Active    
+---------------------------------------------------------------------------------------------------------------------------
+1      Amit Verma                Information Tech     5          120        5          2          2          5.0        Yes       
+2      Meera Iyer                Information Tech     5          103        1          1          0          0.0        Yes       
+3      Neha Kapoor               Electronics          4          90         0          1          1          4.0        Yes       
+4      Karan Mehta               Computer Science     5          90         5          3          2          4.5        Yes       
+5      Vikram Rao                Mechanical           6          85         0          0          0          0.0        Yes       
+6      Priya Singh               Computer Science     3          75         3          1          2          5.0        Yes       
+7      parv shah                 cse                  2          67         3          0          0          0.0        Yes       
+8      Anjali Gupta              Computer Science     4          60         0          4          0          0.0        Yes       
+9      Rohan Desai               Electronics          3          55         0          0          0          0.0        Yes       
+10     Rahul Sharma              Computer Science     3          50         1          2          2          4.5        Yes       
+============================================================================================================================

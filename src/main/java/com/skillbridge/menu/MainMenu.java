@@ -1,7 +1,9 @@
 package com.skillbridge.menu;
 
 import com.skillbridge.model.User;
+import com.skillbridge.model.Manager;
 import com.skillbridge.service.AuthenticationService;
+import com.skillbridge.service.ManagerService;
 import com.skillbridge.util.Validator;
 
 import java.util.Scanner;
@@ -10,12 +12,14 @@ public class MainMenu {
 
     private Scanner scanner;
     private AuthenticationService authService;
+    private ManagerService managerService;
     private DashboardMenu dashboardMenu;
     private ManagerMenu managerMenu;
 
     public MainMenu() {
         this.scanner = new Scanner(System.in);
         this.authService = new AuthenticationService();
+        this.managerService = new ManagerService();
         this.dashboardMenu = new DashboardMenu();
         this.managerMenu = new ManagerMenu();
     }
@@ -27,47 +31,47 @@ public class MainMenu {
             System.out.println("\n=================================");
             System.out.println("   WELCOME TO SKILLBRIDGE");
             System.out.println("=================================");
-            System.out.println("1. Login (Student)");
-            System.out.println("2. Register (Student)");
-            System.out.println("3. Manager Portal");
-            System.out.println("4. Exit Application");
+            System.out.println("1. Login");
+            System.out.println("2. Register");
+            System.out.println("3. Exit");
             System.out.print("Choose an option: ");
 
             String choice = scanner.nextLine();
 
             switch (choice) {
                 case "1":
-                    handleLogin();
+                    handleSmartLogin();
                     break;
                 case "2":
                     handleRegister();
                     break;
                 case "3":
-                    managerMenu.start();
-                    break;
-                case "4":
-                    System.out.println("==========================================");
-                    System.out.println(" Thank you for using SkillBridge. Goodbye!");
-                    System.out.println("==========================================");
                     running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please type 1, 2, 3, or 4.");
+                    System.out.println("Invalid choice.");
             }
         }
     }
 
-    private void handleLogin() {
-        System.out.println("\n--- STUDENT LOGIN ---");
+    private void handleSmartLogin() {
+        System.out.println("\n--- LOGIN ---");
         System.out.print("Enter Email: ");
         String email = scanner.nextLine();
 
         System.out.print("Enter Password: ");
         String password = scanner.nextLine();
 
-        boolean isSuccess = authService.login(email, password);
+        // First check Manager table
+        Manager manager = managerService.loginManager(email, password);
+        if (manager != null) {
+            managerMenu.showManagerDashboardDirect(manager);
+            return;
+        }
 
-        if (isSuccess) {
+        // Then check Student table
+        boolean isStudent = authService.login(email, password);
+        if (isStudent) {
             dashboardMenu.showDashboard();
         }
     }

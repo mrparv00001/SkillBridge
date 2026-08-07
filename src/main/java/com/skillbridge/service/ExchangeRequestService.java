@@ -11,6 +11,7 @@ import java.util.Stack;
 public class ExchangeRequestService {
 
     private final ExchangeRequestDAO exchangeRequestDAO = new ExchangeRequestDAO();
+    private final NotificationService notificationService = new NotificationService();
 
     public boolean sendExchangeRequest(int senderId, int receiverId, int requestedSkillId, String exchangeType, String message) {
         if (senderId == receiverId) {
@@ -18,7 +19,6 @@ public class ExchangeRequestService {
             return false;
         }
 
-        // Check for duplicate pending request
         List<ExchangeRequest> existingRequests = exchangeRequestDAO.getRequestsByUserId(senderId);
         for (ExchangeRequest req : existingRequests) {
             if (req.getSenderId() == senderId &&
@@ -39,16 +39,20 @@ public class ExchangeRequestService {
 
         boolean success = exchangeRequestDAO.createRequest(request);
 
-        // POP-UP NOTIFICATION
         if (success) {
-            System.out.println("\n╔══════════════════════════════════════════╗");
-            System.out.println("║   EXCHANGE REQUEST SENT!                 ║");
-            System.out.println("╠══════════════════════════════════════════╣");
-            System.out.println("║ Sent to User ID: " + receiverId);
-            System.out.println("║ Skill ID: " + requestedSkillId);
-            System.out.println("║ Type: " + exchangeType);
-            System.out.println("║ Notification sent to receiver.           ║");
-            System.out.println("╚══════════════════════════════════════════╝\n");
+            // Real Notification to Receiver
+            notificationService.sendNotification(receiverId,
+                    "New exchange request from User " + senderId + " for Skill ID " + requestedSkillId,
+                    "REQUEST_RECEIVED");
+
+            System.out.println("\n===========================================");
+            System.out.println("|   EXCHANGE REQUEST SENT!                |");
+            System.out.println("===========================================");
+            System.out.println("Sent to User ID: " + receiverId);
+            System.out.println("Skill ID       : " + requestedSkillId);
+            System.out.println("Type           : " + exchangeType);
+            System.out.println("Notification sent to receiver.");
+            System.out.println("===========================================\n");
         }
 
         return success;
@@ -71,15 +75,19 @@ public class ExchangeRequestService {
 
         boolean success = exchangeRequestDAO.updateStatus(requestId, "Accepted");
 
-        // POP-UP NOTIFICATION
         if (success) {
-            System.out.println("\n╔══════════════════════════════════════════╗");
-            System.out.println("║   REQUEST ACCEPTED SUCCESSFULLY!         ║");
-            System.out.println("╠══════════════════════════════════════════╣");
-            System.out.println("║ Request ID: " + requestId);
-            System.out.println("║ You can now schedule the session.        ║");
-            System.out.println("║ Notification sent to sender.             ║");
-            System.out.println("╚══════════════════════════════════════════╝\n");
+            // Real Notification to Sender
+            notificationService.sendNotification(request.getSenderId(),
+                    "Your request (ID: " + requestId + ") has been ACCEPTED. Schedule the session now!",
+                    "REQUEST_ACCEPTED");
+
+            System.out.println("\n===========================================");
+            System.out.println("|   REQUEST ACCEPTED SUCCESSFULLY!        |");
+            System.out.println("===========================================");
+            System.out.println("Request ID     : " + requestId);
+            System.out.println("You can now schedule the session.");
+            System.out.println("Notification sent to sender.");
+            System.out.println("===========================================\n");
         }
 
         return success;
@@ -102,14 +110,18 @@ public class ExchangeRequestService {
 
         boolean success = exchangeRequestDAO.updateStatus(requestId, "Rejected");
 
-        // POP-UP NOTIFICATION
         if (success) {
-            System.out.println("\n╔══════════════════════════════════════════╗");
-            System.out.println("║   REQUEST REJECTED                       ║");
-            System.out.println("╠══════════════════════════════════════════╣");
-            System.out.println("║ Request ID: " + requestId);
-            System.out.println("║ Notification sent to sender.             ║");
-            System.out.println("╚══════════════════════════════════════════╝\n");
+            // Real Notification to Sender
+            notificationService.sendNotification(request.getSenderId(),
+                    "Your request (ID: " + requestId + ") has been REJECTED.",
+                    "REQUEST_REJECTED");
+
+            System.out.println("\n===========================================");
+            System.out.println("|   REQUEST REJECTED                      |");
+            System.out.println("===========================================");
+            System.out.println("Request ID     : " + requestId);
+            System.out.println("Notification sent to sender.");
+            System.out.println("===========================================\n");
         }
 
         return success;
@@ -132,55 +144,49 @@ public class ExchangeRequestService {
 
         boolean success = exchangeRequestDAO.updateStatus(requestId, "Cancelled");
 
-        // POP-UP NOTIFICATION
         if (success) {
-            System.out.println("\n╔══════════════════════════════════════════╗");
-            System.out.println("║   REQUEST CANCELLED                      ║");
-            System.out.println("╠══════════════════════════════════════════╣");
-            System.out.println("║ Request ID: " + requestId);
-            System.out.println("╚══════════════════════════════════════════╝\n");
+            // Real Notification to Receiver
+            notificationService.sendNotification(request.getReceiverId(),
+                    "Exchange request (ID: " + requestId + ") has been CANCELLED by sender.",
+                    "REQUEST_CANCELLED");
+
+            System.out.println("\n===========================================");
+            System.out.println("|   REQUEST CANCELLED                     |");
+            System.out.println("===========================================");
+            System.out.println("Request ID     : " + requestId);
+            System.out.println("===========================================\n");
         }
 
         return success;
     }
 
-    // Return as LinkedList (Data Structure requirement)
     public List<ExchangeRequest> getUserRequestHistory(int userId) {
         return new LinkedList<>(exchangeRequestDAO.getRequestsByUserId(userId));
     }
 
-    /**
-     * QUEUE Data Structure - Get pending requests in FIFO order
-     * (First received request should be accepted first)
-     */
     public Queue<ExchangeRequest> getPendingRequestsQueue(int receiverId) {
         Queue<ExchangeRequest> pendingQueue = new LinkedList<>();
         List<ExchangeRequest> allRequests = exchangeRequestDAO.getRequestsByUserId(receiverId);
 
-        // Sort by date (oldest first) and add to queue
         allRequests.sort((r1, r2) -> r1.getRequestDate().compareTo(r2.getRequestDate()));
 
         for (ExchangeRequest req : allRequests) {
             if (req.getReceiverId() == receiverId && "Pending".equalsIgnoreCase(req.getStatus())) {
-                pendingQueue.offer(req); // FIFO
+                pendingQueue.offer(req);
             }
         }
 
         return pendingQueue;
     }
 
-    /**
-     * STACK Data Structure - Get notifications history (LIFO - Latest first)
-     */
     public Stack<ExchangeRequest> getRequestNotificationsStack(int userId) {
         Stack<ExchangeRequest> notificationStack = new Stack<>();
         List<ExchangeRequest> allRequests = exchangeRequestDAO.getRequestsByUserId(userId);
 
-        // Sort by date (oldest first) then push to stack (latest goes on top)
         allRequests.sort((r1, r2) -> r1.getRequestDate().compareTo(r2.getRequestDate()));
 
         for (ExchangeRequest req : allRequests) {
-            notificationStack.push(req); // LIFO - Latest on top
+            notificationStack.push(req);
         }
 
         return notificationStack;

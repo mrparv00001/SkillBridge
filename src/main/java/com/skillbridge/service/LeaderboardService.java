@@ -67,27 +67,26 @@ public class LeaderboardService {
         Queue<LeaderboardEntry> queue = buildLeaderboardQueue();
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH))) {
-            writer.write("========================================\n");
-            writer.write("       SKILLBRIDGE LEADERBOARD\n");
-            writer.write("       (Top Peer Learners)\n");
-            writer.write("========================================\n\n");
+            writer.write("===========================================================================================================================\n");
+            writer.write("                                      SKILLBRIDGE LEADERBOARD\n");
+            writer.write("==========================================================================================================================\n");
+            writer.write(String.format("%-6s %-25s %-20s %-10s %-10s %-10s %-10s %-10s %-10s %-10s%n",
+                    "Rank", "Name", "Department", "Semester", "Credits", "Teaching", "Learning", "Completed", "Rating", "Active"));
+            writer.write("---------------------------------------------------------------------------------------------------------------------------\n");
 
             if (queue.isEmpty()) {
                 writer.write("No active users found.\n");
-                return;
+            } else {
+                while (!queue.isEmpty()) {
+                    LeaderboardEntry entry = queue.poll();
+                    writer.write(entry.toFormattedString() + "\n");
+                }
             }
 
-            // Process Queue (FIFO)
-            while (!queue.isEmpty()) {
-                LeaderboardEntry entry = queue.poll();
-                writer.write(entry.toFormattedString() + "\n");
-                writer.write("----------------------------------------\n");
-            }
-
-            writer.write("\nGenerated using Queue Data Structure\n");
+            writer.write("============================================================================================================================\n");
 
         } catch (IOException e) {
-            System.err.println("File I/O Error writing leaderboard: " + e.getMessage());
+            System.err.println("File I/O Error: " + e.getMessage());
         }
     }
 
@@ -97,19 +96,25 @@ public class LeaderboardService {
     public void displayLeaderboard() {
         generateLeaderboardFile();
 
-        System.out.println("\n╔══════════════════════════════════════════════════╗");
-        System.out.println("║        SKILLBRIDGE OVERALL STUDENTS RANKING             ║");
-        System.out.println("╚══════════════════════════════════════════════════╝");
+        System.out.println("\n============================================================================================================================");
+        System.out.println("                                      SKILLBRIDGE LEADERBOARD");
+        System.out.println("==============================================================================================================================");
+        System.out.printf("%-6s %-25s %-20s %-10s %-10s %-10s %-10s %-10s %-10s %-10s%n",
+                "Rank", "Name", "Department", "Semester", "Credits", "Teaching", "Learning", "Completed", "Rating", "Active");
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println(line);
+        Queue<LeaderboardEntry> queue = buildLeaderboardQueue();
+
+        if (queue.isEmpty()) {
+            System.out.println("No active users found.");
+        } else {
+            while (!queue.isEmpty()) {
+                LeaderboardEntry entry = queue.poll();
+                System.out.println(entry.toFormattedString());
             }
-        } catch (IOException e) {
-            System.err.println("Error reading leaderboard file: " + e.getMessage());
         }
 
-        System.out.println("\nFile saved at: " + FILE_PATH);
+        System.out.println("==============================================================================================================================");
+        System.out.println("File saved at: " + FILE_PATH);
     }
 }

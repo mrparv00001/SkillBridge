@@ -65,10 +65,8 @@ public class LeaderboardEntry {
     public void setActive(boolean active) { isActive = active; }
 
     public String toFormattedString() {
-        return String.format(
-                "Rank: %d | %s | Dept: %s | Sem: %d | Credits: %d | Teaching: %d | Learning: %d | Completed: %d | Avg Rating: %.2f | Active: %s",
+        return String.format("%-6d %-25s %-20s %-10d %-10d %-10d %-10d %-10d %-10.1f %-10s",
                 rank, name, department, semester, credits, teachingSessions, learningSessions,
-                completedSessions, averageRating, (isActive ? "Yes" : "No")
-        );
+                completedSessions, averageRating, (isActive ? "Yes" : "No"));
     }
 }
