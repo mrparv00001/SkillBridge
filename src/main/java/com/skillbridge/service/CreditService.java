@@ -41,7 +41,6 @@ public class CreditService {
         int teacherCost = getCostByLevel(tLevel);
 
         if (!isSwap) {
-            // --- ONE WAY LEARNING (Direct) ---
             if (learner.getCredits() < teacherCost) {
                 System.out.println("Transaction Failed!");
                 System.out.println("Required Credits: " + teacherCost);
@@ -50,31 +49,30 @@ public class CreditService {
                 return false;
             }
 
-            // Deduct from learner, add to teacher
-            userDAO.updateUserCredits(learnerId, learner.getCredits() - teacherCost);
-            userDAO.updateUserCredits(teacherId, teacher.getCredits() + teacherCost);
+            int newLearnerBalance = learner.getCredits() - teacherCost;
+            int newTeacherBalance = teacher.getCredits() + teacherCost;
 
-            System.out.println("\n╔══════════════════════════════════════════╗");
-            System.out.println("║       CREDIT TRANSACTION SUCCESS         ║");
-            System.out.println("╠══════════════════════════════════════════╣");
-            System.out.println("║ Type: One-Way Learning                   ║");
-            System.out.println("║ Skill Level: " + tLevel);
-            System.out.println("║ Credits Paid: " + teacherCost + " to Teacher");
-            System.out.println("║ Your New Balance: " + (learner.getCredits() - teacherCost));
-            System.out.println("╚══════════════════════════════════════════╝\n");
+            userDAO.updateUserCredits(learnerId, newLearnerBalance);
+            userDAO.updateUserCredits(teacherId, newTeacherBalance);
+
+            System.out.println("\n===========================================");
+            System.out.println("|      CREDIT TRANSACTION SUCCESS         |");
+            System.out.println("===========================================");
+            System.out.println("Type           : One-Way Learning");
+            System.out.println("Skill Level    : " + tLevel);
+            System.out.println("Credits Paid   : " + teacherCost);
+            System.out.println("Your Balance   : " + newLearnerBalance);
+            System.out.println("===========================================\n");
 
             return true;
-
         } else {
-            // --- TWO WAY SWAP EXCHANGE ---
-            // No credit deduction - both parties exchange skills freely
-            System.out.println("\n╔══════════════════════════════════════════╗");
-            System.out.println("║       SWAP EXCHANGE APPROVED             ║");
-            System.out.println("╠══════════════════════════════════════════╣");
-            System.out.println("║ Type: Two-Way Swap Exchange              ║");
-            System.out.println("║ Credits Deducted: 0 (Both parties)       ║");
-            System.out.println("║ Both users exchange skills for free!     ║");
-            System.out.println("╚══════════════════════════════════════════╝\n");
+            System.out.println("\n===========================================");
+            System.out.println("|      SWAP EXCHANGE APPROVED             |");
+            System.out.println("===========================================");
+            System.out.println("Type           : Two-Way Swap");
+            System.out.println("Credits        : 0 (No deduction)");
+            System.out.println("Both users exchange skills for free!");
+            System.out.println("===========================================\n");
 
             return true;
         }
