@@ -60,8 +60,8 @@ public class CreditService {
             System.out.println("===========================================");
             System.out.println("Type           : One-Way Learning");
             System.out.println("Skill Level    : " + tLevel);
-            System.out.println("Credits Paid   : " + teacherCost);
-            System.out.println("Your Balance   : " + newLearnerBalance);
+//            System.out.println("Credits Paid   : " + teacherCost);
+//            System.out.println("Your Balance   : " + newLearnerBalance);
             System.out.println("===========================================\n");
 
             return true;
@@ -70,8 +70,8 @@ public class CreditService {
             System.out.println("|      SWAP EXCHANGE APPROVED             |");
             System.out.println("===========================================");
             System.out.println("Type           : Two-Way Swap");
-            System.out.println("Credits        : 0 (No deduction)");
-            System.out.println("Both users exchange skills for free!");
+//            System.out.println("Credits        : 0 (No deduction)");
+//            System.out.println("Both users exchange skills for free!");
             System.out.println("===========================================\n");
 
             return true;
